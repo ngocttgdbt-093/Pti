@@ -1399,7 +1399,13 @@ async function saveDraftWithoutPhotos(){
   const ok=await showLocalSaveConfirm(n);
   if(!ok)return;
   const b=$('driveSaveDraft');b.disabled=true;setDriveState('Đang lưu nháp tại máy...');
-  try{await saveLocalDraft();await finalizeCompletedSession()}
+  try{
+    await saveLocalDraft();
+    const gdv=$('gdv').value==='Nhập tên khác'?($('gdv').dataset.custom||localStorage.getItem('pti_gdv_custom')||''):($('gdv').value||'');
+    if(gdv){try{localStorage.setItem('pti_gdv',gdv)}catch(e){}}
+    // Dọn bản nháp tự động nhưng giữ localDraftId để lần lưu tiếp theo cập nhật đúng hồ sơ local này.
+    await clearAutoDraft();
+  }
   catch(e){setDriveState('Chưa lưu được nháp tại máy: '+e.message,false);msg('Lỗi lưu nháp tại máy: '+e.message,true)}
   finally{b.disabled=false}
 }
