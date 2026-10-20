@@ -84,7 +84,7 @@ const state={groups:[],current:{title:'Bản ảnh chi tiết thiệt hại',ite
 const $=id=>document.getElementById(id); const drop=$('drop');
 function formatDateDMY(value){const v=String(value||'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const [y,m,d]=v.split('-');return `${d}/${m}/${y}`}return v;}
 function setDateDMY(value){const v=String(value||'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const [y,m,d]=v.split('-');$('date').value=`${d}/${m}/${y}`;}else $('date').value=v;}
-$('date').addEventListener('input',()=>{const el=$('date');const digits=el.value.replace(/\D/g,'').slice(0,8);el.value=digits.length<=2?digits:digits.length<=4?`${digits.slice(0,2)}/${digits.slice(2)}`:`${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}`;});
+$('date').addEventListener('input',()=>{const el=$('date');el.setCustomValidity('');const digits=el.value.replace(/\D/g,'').slice(0,8);el.value=digits.length<=2?digits:digits.length<=4?`${digits.slice(0,2)}/${digits.slice(2)}`:`${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}`;});
 $('date').addEventListener('blur',()=>{const el=$('date');const v=el.value.trim();if(!v)return;const m=v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);if(!m){el.setCustomValidity('Nhập ngày theo định dạng dd/mm/yyyy');el.reportValidity();return;}const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]),dt=new Date(y,mo-1,d);if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d){el.setCustomValidity('Ngày không hợp lệ. Vui lòng kiểm tra lại.');el.reportValidity();return;}el.setCustomValidity('');});
 const exts=/\.(jpe?g|png|webp|gif|heic|heif)$/i;
 function msg(t,show=true){$('status').textContent=t;$('status').classList.toggle('hidden',!show)}
