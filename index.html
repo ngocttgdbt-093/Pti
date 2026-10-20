@@ -1260,23 +1260,31 @@ async function restoreAutoDraft(){
 }
 
 async function saveLocalDraft(){
+  // LƯU LOCAL THUẦN TÚY: không tạo record, không gọi API và không đồng bộ metadata lên Drive.
+  // Nếu đang mở hồ sơ Drive, lưu local sẽ tạo một bản sao độc lập trên thiết bị.
   const groups=snapshotGroupsForProject();
-  // Giữ metadata trên Drive để có thể tìm hồ sơ theo BKS/Mã HS; ảnh gốc vẫn chỉ lưu tại máy.
-  if(!state.driveRecordId&&!state.localDraftId){
-    const bks=($('bks').value||'').trim(),caseNumber=($('hoso').value||'').trim(),gdv=selectedGdv();
-    const res=await fetch(PTI093_API+'?action=createRecord&bks='+encodeURIComponent(bks)+'&caseNumber='+encodeURIComponent(caseNumber)+'&gdv='+encodeURIComponent(gdv)+'&status='+encodeURIComponent('Ảnh lưu tại máy'),{cache:'no-store'});
-    if(!res.ok)throw new Error('Không tạo được mục hồ sơ trên Drive (HTTP '+res.status+').');
-    const data=await res.json();if(!data.success)throw new Error(data.error||'Không tạo được mục hồ sơ trên Drive.');
-    state.driveRecordId=data.recordId||'';state.localDraftId=state.driveRecordId;
-    sessionStorage.setItem('pti_driveRecordId',state.driveRecordId);localStorage.setItem('pti_driveRecordId',state.driveRecordId);
+  const existingLocalId=String(state.localDraftId||'').startsWith('LOCAL-')?state.localDraftId:'';
+  const id=existingLocalId||('LOCAL-'+new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
+
+  // Tách bản local khỏi mọi record/file ID Drive đã có trong phiên làm việc.
+  for(const g of [...(state.groups||[]),state.current||{}]){
+    for(const it of (g.items||[])){
+      it.driveFileId='';
+      it.driveFileName='';
+      it.driveUploadKey='';
+    }
   }
+  state.driveRecordId='';
+  state.localDraftId=id;
+  try{sessionStorage.removeItem('pti_driveRecordId')}catch(e){}
+  try{localStorage.removeItem('pti_driveRecordId')}catch(e){}
+
   const db=await openLocalDraftDB();
-  const id=state.localDraftId||state.driveRecordId||('LOCAL-'+new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
   const sections=groups.map((g,si)=>({
     title:g.title,
     items:g.items.map((it,ii)=>({
       sectionIndex:si,itemIndex:ii,
-      fileName:(it.file&&it.file.name)||it.driveFileName||('anh-'+(ii+1)+'.jpg'),
+      fileName:(it.file&&it.file.name)||('anh-'+(ii+1)+'.jpg'),
       type:(it.file&&it.file.type)||'image/jpeg',
       lastModified:(it.file&&it.file.lastModified)||Date.now(),
       size:(it.file&&it.file.size)||0,
@@ -1289,7 +1297,7 @@ async function saveLocalDraft(){
   const meta={
     id,storageType:'local',caseNumber:($('hoso').value||'').trim(),
     bks:($('bks').value||'').trim(),garage:($('garage').value||'').trim(),gdv:selectedGdv(),date:$('date').value||'',
-    status:'Bản nháp tại máy',settings:{paperSize:'A4',orientation:state.orientation,imagesPerPage:state.per},
+    status:'Bản lưu tại máy',settings:{paperSize:'A4',orientation:state.orientation,imagesPerPage:state.per},
     sections,updatedAt:new Date().toISOString()
   };
   try{
@@ -1312,17 +1320,10 @@ async function saveLocalDraft(){
       });
     };
     await localDraftTransactionDone(tx);
-    state.localDraftId=id;
-    if(!String(id).startsWith('LOCAL-')){
-      state.driveRecordId=id;sessionStorage.setItem('pti_driveRecordId',id);localStorage.setItem('pti_driveRecordId',id);
-    }
-    $('driveId').textContent='💻 Ảnh lưu tại máy · Hồ sơ '+id;
+    $('driveId').textContent='💻 Bản lưu tại máy: '+id;
     $('driveId').classList.remove('hidden');
-    setDriveState('Đã lưu '+sections.reduce((n,g)=>n+g.items.length,0)+' ảnh gốc tại máy. Đang đồng bộ thông tin hồ sơ lên Drive...');
-    msg('Đã lưu nháp ảnh tại máy. Ảnh không được tải lên Drive; thông tin Mã HS/BKS được lưu trên Drive để có thể tìm kiếm.',true);
-    if(!String(id).startsWith('LOCAL-')){
-      saveProjectToDrive(false).then(()=>setDriveState('Đã lưu ảnh tại máy và đồng bộ thông tin hồ sơ lên Drive.')).catch(e=>setDriveState('Ảnh đã lưu tại máy; chưa đồng bộ được thông tin lên Drive: '+e.message,false));
-    }
+    setDriveState('Đã lưu '+sections.reduce((n,g)=>n+g.items.length,0)+' ảnh và thông tin hồ sơ trên thiết bị này. Không ghi dữ liệu lên Drive.');
+    msg('Đã lưu hồ sơ tại máy. Ảnh và thông tin hồ sơ chỉ được lưu trong trình duyệt trên thiết bị này; không tạo hoặc cập nhật hồ sơ trên Google Drive.',true);
   }finally{db.close()}
 }
 async function openLocalDraft(id){
@@ -1384,7 +1385,7 @@ async function openLocalDraft(id){
 function showLocalSaveConfirm(n){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');overlay.className='localSaveOverlay';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');
-    overlay.innerHTML='<div class="localSaveDialog"><div class="localSaveHead"><div class="localSaveIcon">💻</div><div class="localSaveTitle">Xác nhận lưu ảnh tại máy</div></div><div class="localSaveBody">Ảnh gốc sẽ được lưu trong bộ nhớ của <strong>trình duyệt trên máy này</strong> và <strong>không tải ảnh lên Google Drive</strong>.<br><br>Thông tin hồ sơ, chú thích và thứ tự ảnh vẫn được đồng bộ lên Drive để có thể tìm theo Mã HS/BKS. Ảnh lưu tại máy không thể mở trên máy khác.<div class="localSaveCount">📷 Số ảnh: '+n+'</div></div><div class="localSaveActions"><button type="button" class="localSaveCancel">Hủy</button><button type="button" class="localSaveConfirm">✓ Xác nhận & lưu</button></div></div>';
+    overlay.innerHTML='<div class="localSaveDialog"><div class="localSaveHead"><div class="localSaveIcon">💻</div><div class="localSaveTitle">Xác nhận lưu ảnh tại máy</div></div><div class="localSaveBody">Ảnh gốc sẽ được lưu trong bộ nhớ của <strong>trình duyệt trên máy này</strong> và <strong>không tải ảnh lên Google Drive</strong>.<br><br>Thông tin hồ sơ, chú thích và thứ tự ảnh cũng chỉ lưu trên thiết bị này; không tạo hoặc cập nhật dữ liệu trên Google Drive. Hồ sơ lưu tại máy không thể mở trên máy khác.<div class="localSaveCount">📷 Số ảnh: '+n+'</div></div><div class="localSaveActions"><button type="button" class="localSaveCancel">Hủy</button><button type="button" class="localSaveConfirm">✓ Xác nhận & lưu</button></div></div>';
     const finish=v=>{overlay.remove();resolve(v)};
     overlay.querySelector('.localSaveCancel').onclick=()=>finish(false);
     overlay.querySelector('.localSaveConfirm').onclick=()=>finish(true);
