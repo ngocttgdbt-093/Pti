@@ -91,9 +91,16 @@
     if(!result||!result.ok) throw new Error(({UNAUTHORIZED:'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.',INVALID_LOGIN:'Sai tài khoản hoặc mật khẩu.',ADMIN_PASSWORD_NOT_CONFIGURED:'Máy chủ chưa cấu hình mật khẩu quản trị.'})[result&&result.error]||(result&&result.error)||'Máy chủ trả về phản hồi không hợp lệ.');
     return result;
   }
-  function close(){document.getElementById('ptiGdvAdminShade')?.remove();}
+  function close(revokeSession=true){
+    document.getElementById('ptiGdvAdminShade')?.remove();
+    if(revokeSession && token){
+      const activeToken=token;
+      token='';
+      call('logout',{token:activeToken}).catch(()=>{});
+    }
+  }
   function show(content){
-    close();
+    close(false);
     const shade=document.createElement('div'); shade.id='ptiGdvAdminShade';
     shade.innerHTML='<section id="ptiGdvAdminPanel" role="dialog" aria-modal="true">'+content+'</section>';
     shade.addEventListener('click',e=>{if(e.target===shade)close();});
