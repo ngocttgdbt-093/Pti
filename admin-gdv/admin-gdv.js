@@ -88,6 +88,7 @@
   }
   function namesFromInputs(root){root.querySelectorAll('.gdv-row input').forEach(el=>{names[Number(el.dataset.index)]=el.value;});}
   lock.addEventListener('click',()=>token?adminView():loginView());
+  if(API_URL){call('publicList').then(r=>refreshSelect(r.names||[])).catch(e=>console.warn('Không tải được danh sách GĐV PTI:',e.message));}
   // Try to load shared names without requiring admin login. The API intentionally only
   // exposes the public list endpoint after authentication, so no token means no request.
 })();
