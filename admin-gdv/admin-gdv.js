@@ -1,0 +1,94 @@
+/* PTI GĐV Admin UI — uses a dedicated API, never the 093 records API.
+ * Set PTI_GDV_ADMIN_API_URL to the deployed standalone PTI_GDV_ADMIN_API /exec URL.
+ */
+(function(){
+  'use strict';
+  const API_URL = window.PTI_GDV_ADMIN_API_URL || 'https://script.google.com/macros/s/AKfycbx-ol-UyqGxte1f7xbr_pXiQI3As0XFlx0mdeCy1ykUBGKDge40RlGjvpBakhnRH71zQ/exec';
+  const select = document.getElementById('gdv');
+  if (!select || document.getElementById('ptiGdvAdminLock')) return;
+  const css = document.createElement('style');
+  css.textContent = `
+    #ptiGdvAdminLock{position:fixed;right:14px;bottom:12px;z-index:9998;border:1px solid #d5a500;background:#ffdf55;color:#382d00;border-radius:50%;width:42px;height:42px;font-size:21px;box-shadow:0 2px 10px #0002;cursor:pointer}
+    #ptiGdvAdminShade{position:fixed;inset:0;z-index:9999;background:#14251fcc;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px}
+    #ptiGdvAdminPanel{background:#fff;color:#18312a;width:min(520px,100%);max-height:88vh;overflow:auto;border-radius:14px;padding:22px;box-shadow:0 12px 50px #0005;font:14px/1.45 system-ui,sans-serif}
+    #ptiGdvAdminPanel h2{margin:0 0 14px;font-size:20px}
+    #ptiGdvAdminPanel label{display:block;margin:10px 0 4px;font-weight:600}
+    #ptiGdvAdminPanel input{box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd5d1;border-radius:8px;font:inherit}
+    #ptiGdvAdminPanel button{border:0;border-radius:8px;padding:9px 13px;cursor:pointer;font:inherit;margin:5px 5px 0 0}
+    #ptiGdvAdminPanel .primary{background:#176b50;color:white}
+    #ptiGdvAdminPanel .muted{background:#edf2ef;color:#18312a}
+    #ptiGdvAdminPanel .danger{background:#fee2e2;color:#991b1b}
+    #ptiGdvAdminPanel .gdv-row{display:flex;gap:6px;align-items:center;margin:7px 0}
+    #ptiGdvAdminPanel .gdv-row input{flex:1;min-width:0}
+    #ptiGdvAdminMsg{margin-top:10px;white-space:pre-wrap;color:#475569}
+  `;
+  document.head.appendChild(css);
+  const lock = document.createElement('button');
+  lock.id='ptiGdvAdminLock'; lock.type='button'; lock.title='Quản trị danh sách GĐV'; lock.setAttribute('aria-label','Quản trị danh sách GĐV'); lock.textContent='🔒';
+  document.body.appendChild(lock);
+  let token = '', names = [];
+  function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function refreshSelect(list){
+    const current=select.value;
+    select.replaceChildren(new Option('Không chọn GĐV',''));
+    list.forEach(n=>select.add(new Option(n,n)));
+    if(current && list.includes(current)) select.value=current;
+    else if(current) { select.value=''; select.dispatchEvent(new Event('change',{bubbles:true})); }
+  }
+  async function call(action,data={}){
+    if(!API_URL) throw new Error('Chưa cấu hình API quản trị GĐV riêng cho PTI. Chưa gửi dữ liệu đi đâu cả.');
+    const response=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,...data})});
+    const result=await response.json();
+    if(!result.ok) throw new Error(({UNAUTHORIZED:'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.',INVALID_LOGIN:'Sai tài khoản hoặc mật khẩu.',ADMIN_PASSWORD_NOT_CONFIGURED:'Máy chủ chưa cấu hình mật khẩu quản trị.'})[result.error]||result.error||'Yêu cầu không thành công');
+    return result;
+  }
+  function close(){document.getElementById('ptiGdvAdminShade')?.remove();}
+  function show(content){
+    close();
+    const shade=document.createElement('div'); shade.id='ptiGdvAdminShade';
+    shade.innerHTML='<section id="ptiGdvAdminPanel" role="dialog" aria-modal="true">'+content+'</section>';
+    shade.addEventListener('click',e=>{if(e.target===shade)close();});
+    document.body.appendChild(shade);
+    shade.querySelector('[data-close]')?.addEventListener('click',close);
+    return shade;
+  }
+  function loginView(error=''){
+    const shade=show(`<h2>🔐 Quản trị danh sách GĐV</h2>
+      <p>Chỉ quản trị viên mới được thêm, sửa hoặc xóa tên. Dữ liệu danh sách được lưu trên máy chủ quản trị riêng của PTI.</p>
+      <label for="ptiGdvUser">Tài khoản</label><input id="ptiGdvUser" value="Administrator" autocomplete="username">
+      <label for="ptiGdvPass">Mật khẩu</label><input id="ptiGdvPass" type="password" autocomplete="current-password">
+      <div><button class="primary" id="ptiGdvLogin">Đăng nhập</button><button class="muted" data-close>Đóng</button></div>
+      <div id="ptiGdvAdminMsg">${esc(error||(!API_URL?'Chưa kết nối API quản trị riêng. Cần triển khai backend độc lập trước khi sử dụng.':''))}</div>`);
+    shade.querySelector('#ptiGdvLogin').onclick=async()=>{
+      const msg=shade.querySelector('#ptiGdvAdminMsg'); msg.textContent='Đang xác thực…';
+      try{const r=await call('login',{username:shade.querySelector('#ptiGdvUser').value.trim(),password:shade.querySelector('#ptiGdvPass').value});token=r.token; await loadNames(); adminView();}
+      catch(e){msg.textContent=e.message;}
+    };
+    shade.querySelector('#ptiGdvPass').addEventListener('keydown',e=>{if(e.key==='Enter')shade.querySelector('#ptiGdvLogin').click();});
+  }
+  async function loadNames(){const r=await call('list',{token});names=r.names||[];refreshSelect(names);}
+  function adminView(message=''){
+    const rows=names.map((n,i)=>`<div class="gdv-row"><input aria-label="Tên GĐV ${i+1}" data-index="${i}" value="${esc(n)}"><button class="danger" data-remove="${i}" title="Xóa tên này">Xóa</button></div>`).join('');
+    const shade=show(`<h2>Quản trị danh sách GĐV</h2><p>Thêm, sửa trực tiếp tên bên dưới. Khi lưu, danh sách được chuẩn hóa và sắp xếp theo alphabet.</p>
+      <div id="ptiGdvRows">${rows||'<p>Chưa có tên GĐV.</p>'}</div>
+      <button class="muted" id="ptiGdvAdd">+ Thêm GĐV</button><div>
+      <button class="primary" id="ptiGdvSave">Lưu danh sách</button><button class="muted" id="ptiGdvLogout">Đăng xuất</button><button class="muted" data-close>Đóng</button></div>
+      <div id="ptiGdvAdminMsg">${esc(message)}</div>`);
+    shade.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{namesFromInputs(shade);names.splice(Number(b.dataset.remove),1);adminView('Đã xóa khỏi bản nháp; bấm Lưu danh sách để xác nhận.');});
+    shade.querySelector('#ptiGdvAdd').onclick=()=>{namesFromInputs(shade);names.push('');adminView();const inputs=shade.querySelectorAll('.gdv-row input');inputs[inputs.length-1]?.focus();};
+    shade.querySelector('#ptiGdvSave').onclick=async()=>{
+      namesFromInputs(shade);
+      const cleaned=names.map(n=>n.trim().replace(/\s+/g,' ')).filter(Boolean);
+      if(cleaned.some(n=>n.length>100)){shade.querySelector('#ptiGdvAdminMsg').textContent='Tên GĐV không được vượt quá 100 ký tự.';return;}
+      const msg=shade.querySelector('#ptiGdvAdminMsg');msg.textContent='Đang lưu…';
+      try{const r=await call('save',{token,names:cleaned});names=r.names||[];refreshSelect(names);adminView('Đã lưu danh sách GĐV thành công.');}
+      catch(e){msg.textContent=e.message;}
+    };
+    shade.querySelector('#ptiGdvLogout').onclick=async()=>{try{await call('logout',{token});}catch(e){} token='';loginView();};
+  }
+  function namesFromInputs(root){root.querySelectorAll('.gdv-row input').forEach(el=>{names[Number(el.dataset.index)]=el.value;});}
+  lock.addEventListener('click',()=>token?adminView():loginView());
+  if(API_URL){call('publicList').then(r=>refreshSelect(r.names||[])).catch(e=>console.warn('Không tải được danh sách GĐV PTI:',e.message));}
+  // Try to load shared names without requiring admin login. The API intentionally only
+  // exposes the public list endpoint after authentication, so no token means no request.
+})();
