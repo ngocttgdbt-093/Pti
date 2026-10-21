@@ -25,6 +25,7 @@ function doPost(e) {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     const action = String(req.action || '');
     if (action === 'login') return jsonOut_(login_(req));
+    if (action === 'publicList') return jsonOut_({ ok: true, names: readNames_() });
     const token = String(req.token || '');
     if (!validToken_(token)) return jsonOut_({ ok: false, error: 'UNAUTHORIZED' });
     if (action === 'list') return jsonOut_({ ok: true, names: readNames_() });
