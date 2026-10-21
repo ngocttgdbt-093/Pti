@@ -51,13 +51,13 @@
     let host='';
     try{host=new URL(event.origin).hostname;}catch(e){host=String(event.origin||'');}
     const d=event.data;
-    if(host==='script.google.com'||/googleusercontent\\.com$/.test(host)||event.origin==='null'){
+    if(host==='script.google.com'||/googleusercontent\.com$/.test(host)||event.origin==='null'){
       const type=d&&typeof d==='object'?String(d.type||'object'):typeof d;
       const requestId=d&&d.type==='PTI_GDV_API_RESULT'?String(d.requestId||'').slice(0,80):'-';
       const pending=d&&d.requestId?bridgePending.has(String(d.requestId)):false;
       console.info('PTI GĐV bridge inbound origin='+host+' type='+type+' requestId='+requestId+' pending='+pending);
     }
-    if(!(/(^|\\.)googleusercontent\\.com$/.test(host)||host==='script.google.com')){if(d&&d.type==='PTI_GDV_API_RESULT')console.warn('PTI GĐV bridge rejected origin '+host);return;}
+    if(!(/(^|\.)googleusercontent\.com$/.test(host)||host==='script.google.com')){if(d&&d.type==='PTI_GDV_API_RESULT')console.warn('PTI GĐV bridge rejected origin '+host);return;}
     if(!d||d.type!=='PTI_GDV_API_RESULT'||!d.requestId||!bridgePending.has(d.requestId))return;
     const p=bridgePending.get(d.requestId);
     bridgePending.delete(d.requestId);
