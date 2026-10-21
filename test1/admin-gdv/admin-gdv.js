@@ -50,7 +50,7 @@
   window.addEventListener('message',event=>{
     let host='';
     try{host=new URL(event.origin).hostname;}catch(e){return;}
-    if(!(/(^|\\.)googleusercontent\\.com$/.test(host)||host==='script.google.com'))return;
+    if(!(/(^|\\.)googleusercontent\.com$/.test(host)||host==='script.google.com'))return;
     const d=event.data;
     if(!d||d.type!=='PTI_GDV_API_RESULT'||!d.requestId||!bridgePending.has(d.requestId))return;
     const p=bridgePending.get(d.requestId);
