@@ -35,11 +35,53 @@
     if(current && list.includes(current)) select.value=current;
     else if(current) { select.value=''; select.dispatchEvent(new Event('change',{bubbles:true})); }
   }
+  let bridgeFrame=null, bridgeCounter=0;
+  const bridgePending=new Map();
+  function ensureBridge(){
+    if(bridgeFrame && bridgeFrame.isConnected) return bridgeFrame;
+    bridgeFrame=document.createElement('iframe');
+    bridgeFrame.name='ptiGdvAdminBridgeFrame';
+    bridgeFrame.title='Kênh kết nối quản trị PTI';
+    bridgeFrame.setAttribute('aria-hidden','true');
+    bridgeFrame.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;top:-9999px;border:0';
+    document.body.appendChild(bridgeFrame);
+    return bridgeFrame;
+  }
+  window.addEventListener('message',event=>{
+    let host='';
+    try{host=new URL(event.origin).hostname;}catch(e){return;}
+    if(!(/(^|\\.)googleusercontent\\.com$/.test(host)||host==='script.google.com'))return;
+    const d=event.data;
+    if(!d||d.type!=='PTI_GDV_API_RESULT'||!d.requestId||!bridgePending.has(d.requestId))return;
+    const p=bridgePending.get(d.requestId);
+    bridgePending.delete(d.requestId);
+    clearTimeout(p.timer);
+    p.resolve(d.result);
+  });
   async function call(action,data={}){
-    if(!API_URL) throw new Error('Chưa cấu hình API quản trị GĐV riêng cho PTI. Chưa gửi dữ liệu đi đâu cả.');
-    const response=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,...data})});
-    const result=await response.json();
-    if(!result.ok) throw new Error(({UNAUTHORIZED:'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.',INVALID_LOGIN:'Sai tài khoản hoặc mật khẩu.',ADMIN_PASSWORD_NOT_CONFIGURED:'Máy chủ chưa cấu hình mật khẩu quản trị.'})[result.error]||result.error||'Yêu cầu không thành công');
+    if(!API_URL) throw new Error('Chưa cấu hình API quản trị GĐV riêng cho PTI.');
+    ensureBridge();
+    const requestId='pti-gdv-'+Date.now().toString(36)+'-'+(++bridgeCounter).toString(36);
+    const payload=JSON.stringify({action,...data});
+    const resultPromise=new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{bridgePending.delete(requestId);reject(new Error('Máy chủ chưa phản hồi sau 25 giây. Hãy thử lại; chưa xác nhận được kết quả.'));},25000);
+      bridgePending.set(requestId,{resolve,reject,timer});
+    });
+    const form=document.createElement('form');
+    form.method='POST';form.action=API_URL;form.target='ptiGdvAdminBridgeFrame';
+    form.acceptCharset='UTF-8';form.style.display='none';
+    [['bridge','1'],['requestId',requestId],['payload',payload]].forEach(([name,value])=>{
+      const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    try{form.submit();}catch(e){
+      const p=bridgePending.get(requestId);
+      if(p){clearTimeout(p.timer);bridgePending.delete(requestId);}
+      form.remove();throw e;
+    }
+    setTimeout(()=>form.remove(),1000);
+    const result=await resultPromise;
+    if(!result||!result.ok) throw new Error(({UNAUTHORIZED:'Phiên đăng nhập hết hạn. Hãy đăng nhập lại.',INVALID_LOGIN:'Sai tài khoản hoặc mật khẩu.',ADMIN_PASSWORD_NOT_CONFIGURED:'Máy chủ chưa cấu hình mật khẩu quản trị.'})[result&&result.error]||(result&&result.error)||'Máy chủ trả về phản hồi không hợp lệ.');
     return result;
   }
   function close(){document.getElementById('ptiGdvAdminShade')?.remove();}
@@ -89,6 +131,5 @@
   function namesFromInputs(root){root.querySelectorAll('.gdv-row input').forEach(el=>{names[Number(el.dataset.index)]=el.value;});}
   lock.addEventListener('click',()=>token?adminView():loginView());
   if(API_URL){call('publicList').then(r=>refreshSelect(r.names||[])).catch(e=>console.warn('Không tải được danh sách GĐV PTI:',e.message));}
-  // Try to load shared names without requiring admin login. The API intentionally only
-  // exposes the public list endpoint after authentication, so no token means no request.
+  // Load the public GĐV list from the dedicated PTI admin API; never call the 093 API.
 })();
