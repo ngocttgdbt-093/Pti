@@ -50,8 +50,9 @@
   window.addEventListener('message',event=>{
     let host='';
     try{host=new URL(event.origin).hostname;}catch(e){return;}
-    if(!(/(^|\.)googleusercontent\.com$/.test(host)||host==='script.google.com'))return;
     const d=event.data;
+    if(d&&d.type==='PTI_GDV_API_RESULT')console.info('PTI GĐV bridge reply',{host,requestId:String(d.requestId||'').slice(0,80),pending:bridgePending.has(String(d.requestId||''))});
+    if(!(/(^|\\.)googleusercontent\\.com$/.test(host)||host==='script.google.com')){if(d&&d.type==='PTI_GDV_API_RESULT')console.warn('PTI GĐV bridge rejected origin',host);return;}
     if(!d||d.type!=='PTI_GDV_API_RESULT'||!d.requestId||!bridgePending.has(d.requestId))return;
     const p=bridgePending.get(d.requestId);
     bridgePending.delete(d.requestId);
@@ -62,6 +63,7 @@
     if(!API_URL) throw new Error('Chưa cấu hình API quản trị GĐV riêng cho PTI.');
     ensureBridge();
     const requestId='pti-gdv-'+Date.now().toString(36)+'-'+(++bridgeCounter).toString(36);
+    console.info('PTI GĐV bridge request',{action,requestId});
     const payload=JSON.stringify({action,...data});
     const resultPromise=new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>{bridgePending.delete(requestId);reject(new Error('Máy chủ chưa phản hồi sau 25 giây. Hãy thử lại; chưa xác nhận được kết quả.'));},25000);
