@@ -3,7 +3,7 @@
  */
 (function(){
   'use strict';
-  const API_URL = window.PTI_GDV_ADMIN_API_URL || '';
+  const API_URL = window.PTI_GDV_ADMIN_API_URL || 'https://script.google.com/macros/s/AKfycbx-ol-UyqGxte1f7xbr_pXiQI3As0XFlx0mdeCy1ykUBGKDge40RlGjvpBakhnRH71zQ/exec';
   const select = document.getElementById('gdv');
   if (!select || document.getElementById('ptiGdvAdminLock')) return;
   const css = document.createElement('style');
