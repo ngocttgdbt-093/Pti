@@ -77,7 +77,7 @@
 </div></section>
 
 <section class="card"><div class="hd">3. Preview & xuất PDF</div><div class="bd"><div id="previewInfo" class="muted">Chưa có preview.</div><div id="preview" class="preview" style="margin-top:10px"></div><div class="actions"><button id="pdf" class="btn dark" disabled>📄 Xuất PDF A4</button><button id="backEdit" class="btn light" style="display:none">✎ Quay lại chỉnh sửa</button><button id="newCase" class="btn green" style="display:none">＋ Làm bản ảnh mới</button></div><div id="pdfWarn" class="pdfWarn hidden"></div><div class="driveBox"><div style="font-weight:700;color:#006f3d;margin-bottom:6px">☁️ Hồ sơ PTI trên Google Drive</div><div class="driveRow"><button type="button" id="driveCreate" class="btn green">☁️ Tạo & lưu hồ sơ Drive</button><button type="button" id="driveSaveProject" class="btn light">💾 Lưu thay đổi hồ sơ</button><button type="button" id="driveSaveDraft" class="btn light">💻 Lưu ảnh tại máy (không tải ảnh lên Drive)</button><span id="driveState" class="driveState">Chưa tạo hồ sơ Drive.</span></div><div id="driveId" class="driveId hidden"></div><div id="driveProgress" class="hidden" style="margin-top:8px;padding:9px 10px;border:1px solid #cfe1d7;border-radius:8px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#176b4b"><span id="driveProgressText">Đang chuẩn bị...</span><strong id="driveProgressPct">0%</strong></div><div style="height:9px;background:#e7efeb;border-radius:999px;overflow:hidden;margin-top:6px"><div id="driveProgressBar" style="height:100%;width:0%;background:#00834a;transition:width .25s ease"></div></div><div id="driveProgressMeta" style="margin-top:5px;font-size:11px;color:#69766f"></div></div><div id="driveUploadMissing" class="driveWarn hidden" style="margin-top:8px;padding:9px 10px;border:1px solid #ead7a5;border-radius:8px;background:#fffaf0"></div><div id="openLoadBox" class="openLoadBox hidden"><div class="openLoadHead"><span id="openLoadText">Đang tải...</span><strong id="openLoadPct">0%</strong></div><div class="openLoadTrack"><div id="openLoadBar" class="openLoadBar"></div></div><div id="openLoadMeta" class="openLoadMeta"></div></div><div class="driveSearchRow" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input id="driveSearch" class="textInput" placeholder="🔎 Tìm Mã HS, BKS hoặc GĐV (nmn, Ngọc…)"><button type="button" id="driveSearchBtn" class="btn light">🔎 Tìm hồ sơ</button></div><div id="driveSearchResults" style="margin-top:8px"></div></div></section>
-<div class="appFooter">The product was developed by the SOS 093 team - 10/2026<br><span class="version-footer">Version build v45-20261022</span></div>
+<div class="appFooter">The product was developed by the SOS 093 team - 10/2026<br><span class="version-footer">Version build v46-20261022</span></div>
 </div>
 <script>
 const state={groups:[],current:{title:'Bản ảnh chi tiết thiệt hại',items:[]},editing:-1,per:6,orientation:'portrait',pages:[],pageDefs:[],addSeq:0,replaceIndex:-1,insertIndex:-1,filenameCaption:false,driveUploadFailures:[],localDraftId:''};
@@ -1067,42 +1067,12 @@ function renderDriveUploadFailures(){
   box.appendChild(b);
 }
 const PTI093_LOCAL_DB='pti_local_drafts_v1';
-// Mỗi tab làm việc có một mã phiên riêng: F5 vẫn khôi phục được, tab mới không nhận bản nháp cũ.
+// Đồng bộ đúng luồng đã chạy ổn ở dự án 093: sessionStorage giữ mã qua F5,
+// phiên/tab mới không có mã nên tạo phiên mới; IndexedDB dùng một bản nháp hoạt động.
 const PTI093_SESSION_KEY='pti_work_session_id';
-const PTI093_PREVIOUS_SESSION_ID=sessionStorage.getItem(PTI093_SESSION_KEY)||'';
-let ptiPreviousSessionActiveAt=0;
-if(PTI093_PREVIOUS_SESSION_ID){try{ptiPreviousSessionActiveAt=Number(localStorage.getItem('pti_active_work_session:'+PTI093_PREVIOUS_SESSION_ID)||0)}catch(e){}}
-let PTI093_SESSION_ID=PTI093_PREVIOUS_SESSION_ID&&(!ptiPreviousSessionActiveAt||Date.now()-ptiPreviousSessionActiveAt>30000)?PTI093_PREVIOUS_SESSION_ID:'';
+let PTI093_SESSION_ID=sessionStorage.getItem(PTI093_SESSION_KEY)||'';
 if(!PTI093_SESSION_ID){PTI093_SESSION_ID=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);sessionStorage.setItem(PTI093_SESSION_KEY,PTI093_SESSION_ID)}
-// Bản nháp được phân vùng theo phiên để tab mới không ghi đè/xóa nháp của tab đang làm.
-const PTI093_AUTO_DRAFT_ID='AUTO-DRAFT:'+PTI093_SESSION_ID;
-// Mã phiên còn heartbeat khi tab đang mở; tab đóng được dọn khi lần mở kế tiếp chạy.
-const PTI093_ACTIVE_SESSION_PREFIX='pti_active_work_session:';
-const PTI093_ACTIVE_SESSION_KEY=PTI093_ACTIVE_SESSION_PREFIX+PTI093_SESSION_ID;
-function touchWorkSession(){try{localStorage.setItem(PTI093_ACTIVE_SESSION_KEY,String(Date.now()))}catch(e){}}
-touchWorkSession();
-const ptiWorkSessionHeartbeat=setInterval(touchWorkSession,10000);
-window.addEventListener('pagehide',()=>{clearInterval(ptiWorkSessionHeartbeat);try{localStorage.removeItem(PTI093_ACTIVE_SESSION_KEY)}catch(e){}});
-async function clearInactiveAutoDrafts(){
-  const db=await openLocalDraftDB();
-  try{
-    const [drafts,images]=await Promise.all([
-      new Promise((resolve,reject)=>{const q=db.transaction('drafts','readonly').objectStore('drafts').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)}),
-      new Promise((resolve,reject)=>{const q=db.transaction('draftImages','readonly').objectStore('draftImages').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)})
-    ]);
-    const staleIds=new Set(drafts.filter(d=>{
-      if(!d.auto||d.id===PTI093_AUTO_DRAFT_ID)return false;
-      let activeAt=0;try{activeAt=Number(localStorage.getItem(PTI093_ACTIVE_SESSION_PREFIX+d.sessionId)||0)}catch(e){}
-      return !activeAt||Date.now()-activeAt>30000;
-    }).map(d=>d.id));
-    if(!staleIds.size)return;
-    const tx=db.transaction(['drafts','draftImages'],'readwrite');
-    const draftStore=tx.objectStore('drafts'),imageStore=tx.objectStore('draftImages');
-    staleIds.forEach(id=>draftStore.delete(id));
-    images.forEach(image=>{if(staleIds.has(image.draftId))imageStore.delete(image.id)});
-    await localDraftTransactionDone(tx);
-  }finally{db.close()}
-}
+const PTI093_AUTO_DRAFT_ID='AUTO-DRAFT';
 let autoDraftTimer=null,autoDraftSaving=false,autoDraftAgain=false,autoDraftImagesDirty=true,autoDraftRestoring=false,autoDraftImageRevision=0,autoDraftResetting=false;
 function openLocalDraftDB(){
   return new Promise((resolve,reject)=>{
@@ -1640,8 +1610,6 @@ $('driveCreate').onclick=createDriveRecord;
 render();renderLayout();
 ['bks','hoso','gdv','date','garage'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{if(id==='gdv'&&el.value)localStorage.setItem('pti_gdv',el.value);scheduleAutoDraftSave(false)});el.addEventListener('change',()=>scheduleAutoDraftSave(false))});
 restoreAutoDraft();
-// Chờ tab F5 đăng ký lại phiên cũ; sau đó dọn dữ liệu của các phiên đã đóng.
-setTimeout(()=>clearInactiveAutoDrafts().catch(e=>console.warn('Không thể dọn nháp phiên cũ:',e)),1800);
 window.addEventListener('pagehide',()=>{clearTimeout(autoDraftTimer);saveAutoDraft().catch(e=>console.warn('Không kịp tự lưu bản nháp:',e))});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(autoDraftTimer);saveAutoDraft().catch(e=>console.warn('Không tự lưu bản nháp khi ẩn trang:',e))}});
 </script><script src="./admin-gdv/admin-gdv.js?v=20261022-admin-logout1"></script></body></html>
