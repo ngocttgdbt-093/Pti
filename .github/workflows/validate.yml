@@ -38,3 +38,7 @@ jobs:
       - name: Check PTI case-Drive isolation contract
         if: github.ref_name == 'refactor/core-modules-test-20261022' || github.head_ref == 'refactor/core-modules-test-20261022'
         run: node tests/source-contract.test.js
+
+      - name: Test shared GĐV search Core module
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.head_ref == 'refactor/core-modules-test-20261022'
+        run: node tests/gdv-search.test.js
