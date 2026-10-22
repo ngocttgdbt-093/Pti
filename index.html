@@ -575,7 +575,8 @@ function snapshotGroupsForProject(){
 function buildProjectData(){
   return {version:'PTI093-1.2',recordId:state.driveRecordId||'',caseNumber:($('hoso').value||'').trim(),bks:($('bks').value||'').trim(),date:$('date').value||'',garage:($('garage').value||'').trim(),maHoSo:($('hoso').value||'').trim(),gdv:selectedGdv(),status:state.localDraftId?'Ảnh lưu tại máy':'Đang xử lý',storageType:state.localDraftId?'local':'drive',settings:{paperSize:'A4',orientation:state.orientation,imagesPerPage:state.per},sections:snapshotGroupsForProject().map(g=>({title:g.title,items:g.items.map((it,idx)=>({fileId:it.driveFileId||'',fileName:it.driveFileName||((it.file&&it.file.name)||''),clientKey:it.key||'',uploadKey:it.driveUploadKey||'',caption:it.caption||'',rotate:((it.rotate||0)%360+360)%360,addSeq:it.addSeq||idx+1}))})),updatedAt:new Date().toISOString()};
 }
-async function saveProjectToDrive(showMsg=true){\n  if(!PTI_CASE_DRIVE_ENABLED)throw new Error('Chức năng hồ sơ Drive đã tắt trong PTI.');
+async function saveProjectToDrive(showMsg=true){
+  if(!PTI_CASE_DRIVE_ENABLED)throw new Error('Chức năng hồ sơ Drive đã tắt trong PTI.');
   const id=state.driveRecordId||sessionStorage.getItem('pti_driveRecordId')||'';
   if(!id)throw new Error('Chưa có hồ sơ Drive.');
   const revision=String(Date.now())+'-'+Math.random().toString(36).slice(2,8),payload=JSON.stringify({action:'saveProject',recordId:id,revision,project:buildProjectData()});
@@ -587,7 +588,8 @@ async function saveProjectToDrive(showMsg=true){\n  if(!PTI_CASE_DRIVE_ENABLED)t
   }
   throw new Error('Chưa xác nhận được project.pti trên máy chủ.');
 }
-async function openRecordFromDrive(recordId){\n  if(!PTI_CASE_DRIVE_ENABLED){msg('Chức năng mở hồ sơ Drive đã tắt trong PTI.',true);return;}
+async function openRecordFromDrive(recordId){
+  if(!PTI_CASE_DRIVE_ENABLED){msg('Chức năng mở hồ sơ Drive đã tắt trong PTI.',true);return;}
   setOpenLoad('Google Drive',0,0,'Đang mở hồ sơ và đọc danh sách ảnh từ Google Drive...');
   setDriveState('Đang tải hồ sơ từ Google Drive...');
   const data=await fetch(PTI093_API+'?action=openRecord&recordId='+encodeURIComponent(recordId)+'&_='+Date.now(),{cache:'no-store'}).then(r=>r.json());
@@ -766,7 +768,8 @@ function sameLocalDriveRecord(local,drive){
   const lb=normalizeRecordSearch(local.bks),db=normalizeRecordSearch(drive.bks);
   return !!(lc&&dc&&lc===dc&&lb&&db&&lb===db)
 }
-async function searchDriveRecords(){\n  if(!PTI_CASE_DRIVE_ENABLED){msg('Chức năng tìm hồ sơ Drive đã tắt trong PTI.',true);return;}
+async function searchDriveRecords(){
+  if(!PTI_CASE_DRIVE_ENABLED){msg('Chức năng tìm hồ sơ Drive đã tắt trong PTI.',true);return;}
   const keyword=($('driveSearch').value||'').trim(),box=$('driveSearchResults');
   if(!keyword){box.innerHTML='<div class="muted">Nhập Mã HS, BKS hoặc tên GĐV để tìm.</div>';return}
   box.innerHTML='<div class="muted">Đang tìm hồ sơ Drive và bản lưu tại máy...</div>';
@@ -1473,7 +1476,8 @@ async function saveDraftWithoutPhotos(){
     msg('❌ Lưu tại máy thất bại: '+e.message,true);
   }finally{b.disabled=false}
 }
-async function createDriveRecord(){\n  if(!PTI_CASE_DRIVE_ENABLED){msg('PTI không hỗ trợ lưu hồ sơ ảnh lên Drive.',true);return;}
+async function createDriveRecord(){
+  if(!PTI_CASE_DRIVE_ENABLED){msg('PTI không hỗ trợ lưu hồ sơ ảnh lên Drive.',true);return;}
   if(state.driveRecordId){try{const result=await window.pti093UploadAll();if(result&&result.failures&&result.failures.length)throw new Error('Còn ảnh chưa được xác nhận tải lên Drive.');state.localDraftId='';await saveProjectToDrive();await finalizeCompletedSession();setDriveState('Hồ sơ đã được cập nhật trên Drive.');return}catch(e){msg('Lỗi cập nhật hồ sơ: '+e.message,true);return}}
   const btn=$('driveCreate');btn.disabled=true;setDriveState('Đang tạo hồ sơ và lưu dữ liệu...');
   try{
@@ -1485,7 +1489,8 @@ async function createDriveRecord(){\n  if(!PTI_CASE_DRIVE_ENABLED){msg('PTI khô
     await saveProjectToDrive(false);await finalizeCompletedSession();setDriveState('Đã tạo hồ sơ, lưu ảnh và lưu dữ liệu nháp.');msg('Đã tạo và lưu hồ sơ thành công. Có thể tìm lại theo Mã HS hoặc BKS.',true);
   }catch(e){setDriveState('Chưa hoàn tất hồ sơ: '+e.message,false);msg('Lỗi lưu hồ sơ: '+e.message,true)}finally{btn.disabled=false}
 }
-window.pti093UploadAll = async function(){\n  if(!PTI_CASE_DRIVE_ENABLED){const error=new Error('PTI không hỗ trợ tải ảnh hồ sơ lên Drive.');msg(error.message,true);return {sent:0,total:0,failures:[error.message]};}
+window.pti093UploadAll = async function(){
+  if(!PTI_CASE_DRIVE_ENABLED){const error=new Error('PTI không hỗ trợ tải ảnh hồ sơ lên Drive.');msg(error.message,true);return {sent:0,total:0,failures:[error.message]};}
   const id=state.driveRecordId||sessionStorage.getItem('pti_driveRecordId')||'';
   if(!id){
     setDriveState('Chưa có Record ID Drive.',false);
