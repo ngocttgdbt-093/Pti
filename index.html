@@ -1067,12 +1067,13 @@ function renderDriveUploadFailures(){
   box.appendChild(b);
 }
 const PTI093_LOCAL_DB='pti_local_drafts_v1';
-const PTI093_AUTO_DRAFT_ID='AUTO-DRAFT';
 // Mỗi tab làm việc có một mã phiên riêng: F5 vẫn khôi phục được, tab mới không nhận bản nháp cũ.
 const PTI093_SESSION_KEY='pti_work_session_id';
 const ptiNavigationType=(performance.getEntriesByType('navigation')[0]||{}).type||'';
 let PTI093_SESSION_ID=ptiNavigationType==='reload'?(sessionStorage.getItem(PTI093_SESSION_KEY)||''):'';
 if(!PTI093_SESSION_ID){PTI093_SESSION_ID=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);sessionStorage.setItem(PTI093_SESSION_KEY,PTI093_SESSION_ID)}
+// Bản nháp được phân vùng theo phiên để tab mới không ghi đè/xóa nháp của tab đang làm.
+const PTI093_AUTO_DRAFT_ID='AUTO-DRAFT:'+PTI093_SESSION_ID;
 let autoDraftTimer=null,autoDraftSaving=false,autoDraftAgain=false,autoDraftImagesDirty=true,autoDraftRestoring=false,autoDraftImageRevision=0,autoDraftResetting=false;
 function openLocalDraftDB(){
   return new Promise((resolve,reject)=>{
