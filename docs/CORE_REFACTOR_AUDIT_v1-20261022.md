@@ -30,3 +30,10 @@ This is a source-boundary audit on `refactor/core-modules-test-20261022`, not a 
 - Manual syntax parsing of current main 093 inline scripts succeeded (5/5); PTI test-branch inline script succeeded (1/1); PTI admin script syntax succeeded. Static checks confirmed the PTI guard, hidden search, local-save wiring, admin script inclusion, and dedicated admin API markers.
 - GitHub combined status responses did not report any status checks at the time of inspection. Do not call CI green until a completed workflow run is visible.
 - Still pending: verify the test branch's workflow run, browser-test PTI local save/autosave/reload recovery, verify admin login and user-directory operations, then begin extracting shared Core modules incrementally. No production branch was changed and no deployment was performed.
+
+## Shared Core extraction milestone — v2-20261022
+
+- PTI now imports the same `core/gdv-search.js` helper module as the 093 test branch and binds the app's existing `normalizeRecordSearch`, `gdvInitials`, and `gdvSearchMatches` names to the shared module. The app-specific GĐV name list and PTI admin module remain app-specific.
+- Added shared-helper tests for normalization, initials, partial-name matching, empty queries, and no-match behavior, with a GitHub Actions step configured on the test branch.
+- Source parsing after extraction: PTI inline script 1/1 parsed successfully; the shared helper module loaded and manual behavior checks passed. These are syntax/pure-helper checks, not full browser acceptance.
+- The PTI case-Drive feature gate remains disabled; local-only save and the separate GĐV admin module are preserved by source-contract checks. Browser verification of autosave/reload and admin workflows remains pending.
