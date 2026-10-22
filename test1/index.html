@@ -1074,6 +1074,33 @@ let PTI093_SESSION_ID=ptiNavigationType==='reload'?(sessionStorage.getItem(PTI09
 if(!PTI093_SESSION_ID){PTI093_SESSION_ID=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);sessionStorage.setItem(PTI093_SESSION_KEY,PTI093_SESSION_ID)}
 // Bản nháp được phân vùng theo phiên để tab mới không ghi đè/xóa nháp của tab đang làm.
 const PTI093_AUTO_DRAFT_ID='AUTO-DRAFT:'+PTI093_SESSION_ID;
+// Mã phiên còn heartbeat khi tab đang mở; tab đóng được dọn khi lần mở kế tiếp chạy.
+const PTI093_ACTIVE_SESSION_PREFIX='pti_active_work_session:';
+const PTI093_ACTIVE_SESSION_KEY=PTI093_ACTIVE_SESSION_PREFIX+PTI093_SESSION_ID;
+function touchWorkSession(){try{localStorage.setItem(PTI093_ACTIVE_SESSION_KEY,String(Date.now()))}catch(e){}}
+touchWorkSession();
+const ptiWorkSessionHeartbeat=setInterval(touchWorkSession,10000);
+window.addEventListener('pagehide',()=>{clearInterval(ptiWorkSessionHeartbeat);try{localStorage.removeItem(PTI093_ACTIVE_SESSION_KEY)}catch(e){}});
+async function clearInactiveAutoDrafts(){
+  const db=await openLocalDraftDB();
+  try{
+    const [drafts,images]=await Promise.all([
+      new Promise((resolve,reject)=>{const q=db.transaction('drafts','readonly').objectStore('drafts').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)}),
+      new Promise((resolve,reject)=>{const q=db.transaction('draftImages','readonly').objectStore('draftImages').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)})
+    ]);
+    const staleIds=new Set(drafts.filter(d=>{
+      if(!d.auto||d.id===PTI093_AUTO_DRAFT_ID)return false;
+      let activeAt=0;try{activeAt=Number(localStorage.getItem(PTI093_ACTIVE_SESSION_PREFIX+d.sessionId)||0)}catch(e){}
+      return !activeAt||Date.now()-activeAt>30000;
+    }).map(d=>d.id));
+    if(!staleIds.size)return;
+    const tx=db.transaction(['drafts','draftImages'],'readwrite');
+    const draftStore=tx.objectStore('drafts'),imageStore=tx.objectStore('draftImages');
+    staleIds.forEach(id=>draftStore.delete(id));
+    images.forEach(image=>{if(staleIds.has(image.draftId))imageStore.delete(image.id)});
+    await localDraftTransactionDone(tx);
+  }finally{db.close()}
+}
 let autoDraftTimer=null,autoDraftSaving=false,autoDraftAgain=false,autoDraftImagesDirty=true,autoDraftRestoring=false,autoDraftImageRevision=0,autoDraftResetting=false;
 function openLocalDraftDB(){
   return new Promise((resolve,reject)=>{
@@ -1610,6 +1637,8 @@ $('driveCreate').onclick=createDriveRecord;
 render();renderLayout();
 ['bks','hoso','gdv','date','garage'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{if(id==='gdv'&&el.value)localStorage.setItem('pti_gdv',el.value);scheduleAutoDraftSave(false)});el.addEventListener('change',()=>scheduleAutoDraftSave(false))});
 restoreAutoDraft();
+// Chờ tab F5 đăng ký lại phiên cũ; sau đó dọn dữ liệu của các phiên đã đóng.
+setTimeout(()=>clearInactiveAutoDrafts().catch(e=>console.warn('Không thể dọn nháp phiên cũ:',e)),1800);
 async function flushAutoDraftBeforeExit(){
   clearTimeout(autoDraftTimer);
   while(autoDraftSaving)await new Promise(resolve=>setTimeout(resolve,20));
