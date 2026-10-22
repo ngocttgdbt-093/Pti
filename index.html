@@ -484,7 +484,7 @@ $('driveSearch').addEventListener('keydown',e=>{if(e.key==='Enter')searchDriveRe
 $('driveSaveProject').onclick=async()=>{const b=$('driveSaveProject');b.disabled=true;try{const result=await window.pti093UploadAll();if(result&&result.failures&&result.failures.length)throw new Error('Còn ảnh chưa được xác nhận tải lên Drive.');if(result&&result.total>result.sent)throw new Error('Chưa xác nhận đủ ảnh trên Drive.');state.localDraftId='';await saveProjectToDrive();await finalizeCompletedSession();setDriveState('Đã lưu thay đổi hồ sơ. Ảnh hiện có đã được xác nhận trên Drive.')}catch(e){msg('Lỗi lưu thay đổi: '+e.message,true)}finally{b.disabled=false}};
 $('driveCreate').onclick=createDriveRecord;
 $('driveSaveDraft').onclick=saveDraftWithoutPhotos;
-$('newCase').onclick=async()=>{const gdv=$('gdv').value==='Nhập tên khác'?($('gdv').dataset.custom||localStorage.getItem('pti_gdv_custom')||''):$('gdv').value,bks=$('bks').value||'',hoso=$('hoso').value||'';if(gdv)localStorage.setItem('pti_gdv',gdv);$('newCase').disabled=true;try{await clearAutoDraft()}catch(e){console.warn(e)}location.reload()};
+$('newCase').onclick=async()=>{const gdv=$('gdv').value==='Nhập tên khác'?($('gdv').dataset.custom||localStorage.getItem('pti_gdv_custom')||''):$('gdv').value;if(gdv)localStorage.setItem('pti_gdv',gdv);$('newCase').disabled=true;autoDraftSessionEnded=true;clearTimeout(autoDraftTimer);autoDraftAgain=false;try{await clearAutoDraft();location.reload()}catch(e){autoDraftSessionEnded=false;$('newCase').disabled=false;setDriveState('Chưa thể bắt đầu hồ sơ mới: chưa dọn được bản nháp cũ.',false);msg('Không thể dọn bản nháp cũ nên Robo chưa tải lại trang. Dữ liệu hiện tại được giữ để tránh mất ảnh. Lỗi: '+(e&&e.message||e),true)}};
 
 /* ===== PTI093 GOOGLE DRIVE - GIAI ĐOẠN 1: TẠO RECORD ===== */
 const PTI093_API='https://script.google.com/macros/s/AKfycbwmydXC8QZEKDBoRvJOGZSfQjdYSWzteyAMIYjr7RfoEIiHFetnGUj8A0FlB0hjJcB2kw/exec';
@@ -1096,7 +1096,7 @@ async function clearInactiveAutoDrafts(){
     await localDraftTransactionDone(tx);
   }finally{db.close()}
 }
-let autoDraftTimer=null,autoDraftSaving=false,autoDraftAgain=false,autoDraftImagesDirty=true,autoDraftRestoring=false,autoDraftImageRevision=0,autoDraftResetting=false;
+let autoDraftTimer=null,autoDraftSaving=false,autoDraftAgain=false,autoDraftImagesDirty=true,autoDraftRestoring=false,autoDraftImageRevision=0,autoDraftResetting=false,autoDraftSessionEnded=false;
 function openLocalDraftDB(){
   return new Promise((resolve,reject)=>{
     if(!('indexedDB' in window)){reject(new Error('Trình duyệt không hỗ trợ lưu nháp tại máy.'));return}
@@ -1151,13 +1151,13 @@ async function getLocalDrafts(){
 }
 
 function scheduleAutoDraftSave(imagesDirty=true){
-  if(autoDraftRestoring||autoDraftResetting)return;
+  if(autoDraftSessionEnded||autoDraftRestoring||autoDraftResetting)return;
   if(imagesDirty){autoDraftImagesDirty=true;autoDraftImageRevision++}
   clearTimeout(autoDraftTimer);
   autoDraftTimer=setTimeout(()=>saveAutoDraft().catch(e=>{const t='Lỗi tự lưu bản nháp: '+(e&&e.message||e);console.warn(t,e);setDriveState(t,false);msg(t,true)}),100);
 }
 async function saveAutoDraft(){
-  if(autoDraftRestoring||autoDraftResetting)return;
+  if(autoDraftSessionEnded||autoDraftRestoring||autoDraftResetting)return;
   if(autoDraftSaving){autoDraftAgain=true;return}
   autoDraftSaving=true;
   const imagesNeedSaving=autoDraftImagesDirty,imageRevision=autoDraftImageRevision;
@@ -1216,13 +1216,19 @@ async function finalizeCompletedSession(){
   if(gdv){
     try{localStorage.setItem('pti_gdv',gdv)}catch(e){}
   }
+  // Đánh dấu trước khi chờ IndexedDB để pagehide/visibilitychange không ghi lại nháp.
+  autoDraftSessionEnded=true;
+  clearTimeout(autoDraftTimer);
+  autoDraftAgain=false;
   try{
     await clearAutoDraft();
-    // Xóa định danh phiên hiện tại khỏi bộ nhớ phiên; hồ sơ thật trên Drive/Local
-    // vẫn giữ nguyên và có thể tìm/mở lại từ chức năng Tìm hồ sơ.
+    // Chỉ xóa nháp tự động; hồ sơ thật trên Drive/Local vẫn được giữ nguyên.
     state.localDraftId='';
   }catch(e){
+    // Nếu dọn nháp lỗi, mở lại quyền tự lưu để không mất khả năng khôi phục.
+    autoDraftSessionEnded=false;
     console.warn('Không thể dọn bản nháp sau khi hoàn tất:',e);
+    throw e;
   }
 }
 
@@ -1466,7 +1472,7 @@ async function saveDraftWithoutPhotos(){
     await saveLocalDraft();
     const gdv=$('gdv').value==='Nhập tên khác'?($('gdv').dataset.custom||localStorage.getItem('pti_gdv_custom')||''):($('gdv').value||'');
     if(gdv){try{localStorage.setItem('pti_gdv',gdv)}catch(e){}}
-    await clearAutoDraft();
+    await finalizeCompletedSession();
   }catch(e){
     setDriveState('Chưa lưu được nháp tại máy: '+e.message,false);
     msg('❌ Lưu tại máy thất bại: '+e.message,true);
@@ -1656,6 +1662,6 @@ render();renderLayout();
 ['bks','hoso','gdv','date','garage'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{if(id==='gdv'&&el.value)localStorage.setItem('pti_gdv',el.value);scheduleAutoDraftSave(false)});el.addEventListener('change',()=>scheduleAutoDraftSave(false))});
 restoreAutoDraft();
 setTimeout(()=>clearInactiveAutoDrafts().catch(e=>console.warn('Không thể dọn nháp phiên cũ:',e)),1800);
-window.addEventListener('pagehide',()=>{clearTimeout(autoDraftTimer);saveAutoDraft().catch(e=>console.warn('Không kịp tự lưu bản nháp:',e))});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){clearTimeout(autoDraftTimer);saveAutoDraft().catch(e=>console.warn('Không tự lưu bản nháp khi ẩn trang:',e))}});
+window.addEventListener('pagehide',()=>{clearTimeout(autoDraftTimer);if(!autoDraftSessionEnded)saveAutoDraft().catch(e=>console.warn('Không kịp tự lưu bản nháp:',e))});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&!autoDraftSessionEnded){clearTimeout(autoDraftTimer);saveAutoDraft().catch(e=>console.warn('Không tự lưu bản nháp khi ẩn trang:',e))}});
 </script><script src="./admin-gdv/admin-gdv.js?v=20261022-admin-logout1"></script></body></html>
