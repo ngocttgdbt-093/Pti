@@ -34,3 +34,7 @@ jobs:
           NODE
       - name: Check PTI admin JavaScript
         run: node --check admin-gdv/admin-gdv.js
+
+      - name: Check PTI case-Drive isolation contract
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.head_ref == 'refactor/core-modules-test-20261022'
+        run: node tests/source-contract.test.js
