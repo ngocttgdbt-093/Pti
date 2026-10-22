@@ -22,3 +22,11 @@ This is a source-boundary audit on `refactor/core-modules-test-20261022`, not a 
 2. Remove/disable case-Drive search/open/create/save/upload pathways on this branch, while retaining the local-only save action and admin module.
 3. Extract shared Core incrementally; preserve app-specific adapters/configuration and the current 093 Drive saver unchanged.
 4. Syntax tests are not functional tests. Do not merge or deploy until browser-level draft recovery and admin regression checks are recorded.
+
+## Implementation record — v1-20261022.8
+
+- On the PTI test branch, added a feature gate `PTI_CASE_DRIVE_ENABLED=false` and guards to case create/save/open/search/upload entry points. The Drive case-search row and results are hidden. The local-only `driveSaveDraft` / `saveDraftWithoutPhotos` action remains wired, and the separate `admin-gdv/admin-gdv.js` remains included with its dedicated API.
+- Added `tests/source-contract.test.js` and a GitHub Actions step for the PTI boundary contract. Added a corresponding GitHub Actions source-contract check for the 093 draft-recovery identifiers. These checks are source-contract checks, not browser-level functional acceptance.
+- Manual syntax parsing of current main 093 inline scripts succeeded (5/5); PTI test-branch inline script succeeded (1/1); PTI admin script syntax succeeded. Static checks confirmed the PTI guard, hidden search, local-save wiring, admin script inclusion, and dedicated admin API markers.
+- GitHub combined status responses did not report any status checks at the time of inspection. Do not call CI green until a completed workflow run is visible.
+- Still pending: verify the test branch's workflow run, browser-test PTI local save/autosave/reload recovery, verify admin login and user-directory operations, then begin extracting shared Core modules incrementally. No production branch was changed and no deployment was performed.
