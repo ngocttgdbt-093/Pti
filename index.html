@@ -1154,7 +1154,7 @@ function scheduleAutoDraftSave(imagesDirty=true){
   if(autoDraftSessionEnded||autoDraftRestoring||autoDraftResetting)return;
   if(imagesDirty){autoDraftImagesDirty=true;autoDraftImageRevision++}
   clearTimeout(autoDraftTimer);
-  autoDraftTimer=setTimeout(()=>saveAutoDraft().catch(e=>{const t='Lỗi tự lưu bản nháp: '+(e&&e.message||e);console.warn(t,e);setDriveState(t,false);msg(t,true)}),100);
+  autoDraftTimer=setTimeout(()=>saveAutoDraft().catch(e=>{const t='Lỗi tự lưu bản nháp: '+(e&&e.message||e);console.warn(t,e);setDriveState(t,false);msg(t,true)}),50);
 }
 async function saveAutoDraft(){
   if(autoDraftSessionEnded||autoDraftRestoring||autoDraftResetting)return;
@@ -1661,6 +1661,14 @@ $('driveCreate').onclick=createDriveRecord;
 render();renderLayout();
 ['bks','hoso','gdv','date','garage'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{if(id==='gdv'&&el.value)localStorage.setItem('pti_gdv',el.value);scheduleAutoDraftSave(false)});el.addEventListener('change',()=>scheduleAutoDraftSave(false))});
 restoreAutoDraft();
+// Bảo hiểm cho trường hợp người dùng quên chờ thông báo tự lưu: định kỳ chốt metadata và ảnh đã đánh dấu thay đổi.
+// Không chạy trong lúc khôi phục/dọn phiên, và không tạo nháp rỗng khi chưa có công việc.
+const autoDraftSafetyInterval=setInterval(()=>{
+  if(autoDraftSessionEnded||autoDraftRestoring||autoDraftResetting||autoDraftSaving)return;
+  const hasWork=state.current.items.length||state.groups.length||$('bks').value||$('hoso').value||$('garage').value;
+  if(hasWork)saveAutoDraft().catch(e=>console.warn('Lỗi chốt bản nháp định kỳ:',e));
+},1500);
+window.addEventListener('pagehide',()=>clearInterval(autoDraftSafetyInterval));
 setTimeout(()=>clearInactiveAutoDrafts().catch(e=>console.warn('Không thể dọn nháp phiên cũ:',e)),1800);
 window.addEventListener('pagehide',()=>{clearTimeout(autoDraftTimer);if(!autoDraftSessionEnded)saveAutoDraft().catch(e=>console.warn('Không kịp tự lưu bản nháp:',e))});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&!autoDraftSessionEnded){clearTimeout(autoDraftTimer);saveAutoDraft().catch(e=>console.warn('Không tự lưu bản nháp khi ẩn trang:',e))}});
