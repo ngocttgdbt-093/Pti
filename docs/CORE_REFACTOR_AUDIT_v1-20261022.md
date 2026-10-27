@@ -53,3 +53,11 @@ This is a source-boundary audit on `refactor/core-modules-test-20261022`, not a 
 - Added shared-helper tests for normalization, initials, partial-name matching, empty queries, and no-match behavior, with a GitHub Actions step configured on the test branch.
 - Source parsing after extraction: PTI inline script 1/1 parsed successfully; the shared helper module loaded and manual behavior checks passed. These are syntax/pure-helper checks, not full browser acceptance.
 - The PTI case-Drive feature gate remains disabled; local-only save and the separate GĐV admin module are preserved by source-contract checks. Browser verification of autosave/reload and admin workflows remains pending.
+
+## Browser end-to-end acceptance — 20261027
+
+- Ran one synthetic case in Microsoft Edge against the local HTTP preview (`http://127.0.0.1:8765/`); no production deployment or Drive case save was performed.
+- Entered test-only case metadata, selected 4-up landscape, loaded one synthetic SVG image, added a caption and rotation, and generated a one-page A4 preview.
+- Local-device save completed successfully and displayed 100%, 1 image, and “Không ghi dữ liệu lên Drive”. The generated PDF exported successfully at 0.06 MB, 165 DPI, JPEG 84%; the downloaded file was 61,062 bytes, began with `%PDF-1.4`, and contained the `%%EOF` terminator.
+- The separate GĐV admin module logged a list-request timeout after 25 seconds during page load. No admin login or list changes were performed; this did not block the case editor, local save, preview, or PDF export.
+- This closes the pending browser-level Core case workflow for input → image editing → preview → local-only save → PDF export. The Drive save step remains excluded as requested and the Drive module source/parameters were not changed.
