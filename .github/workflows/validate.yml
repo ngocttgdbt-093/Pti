@@ -43,6 +43,18 @@ jobs:
         if: github.ref_name == 'refactor/core-modules-test-20261022' || github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'refactor/core-modules-test-20261022' || github.head_ref == 'codex/project5-drive-module-package'
         run: node tests/gdv-search.test.js
 
+      - name: Test local draft storage Core module
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'refactor/core-modules-test-20261022' || github.head_ref == 'codex/project5-drive-module-package'
+        run: node --test tests/local-draft-storage.test.js
+
+      - name: Test shared image layout Core module
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'refactor/core-modules-test-20261022' || github.head_ref == 'codex/project5-drive-module-package'
+        run: node --test tests/image-layout.test.js
+
+      - name: Test shared image collection Core module
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'refactor/core-modules-test-20261022' || github.head_ref == 'codex/project5-drive-module-package'
+        run: node --test tests/image-collection.test.js
+
       - name: Test 093 Drive storage module package
         if: github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'codex/project5-drive-module-package'
         run: node --test modules/drive-storage-093/drive-storage-093.test.js

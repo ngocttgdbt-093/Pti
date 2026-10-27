@@ -31,6 +31,22 @@ This is a source-boundary audit on `refactor/core-modules-test-20261022`, not a 
 - GitHub combined status responses did not report any status checks at the time of inspection. Do not call CI green until a completed workflow run is visible.
 - Still pending: verify the test branch's workflow run, browser-test PTI local save/autosave/reload recovery, verify admin login and user-directory operations, then begin extracting shared Core modules incrementally. No production branch was changed and no deployment was performed.
 
+## Local draft safety milestone — 20261027
+
+- Extracted the grouped IndexedDB replacement into `core/local-draft-storage.js`. A failed local save now leaves the in-memory Drive association intact; successful saves clear it only after the transaction completes.
+- Automatic draft IDs are now scoped to the `sessionStorage` work-session ID. A legacy `AUTO-DRAFT` record is migrated only when its stored session ID matches the current session; stale-session cleanup preserves drafts whose heartbeat is still active.
+- Added six local-draft tests for grouped replacement, transaction failure, per-session isolation, legacy migration ownership, and save-state ordering. Source checks, helper tests, Drive module tests, inline syntax, and `git diff --check` pass locally.
+- Browser-level IndexedDB recovery and the remote GitHub Actions run remain unverified. Loopback listening is denied in this environment, so the local app could not be served to the browser. Admin login and user-directory write operations were not exercised against the separate service.
+
+## Image Core consistency milestone — 20261027.2
+
+- Extracted shared image layout normalization and grid calculations into `core/image-layout.js`. Supported page counts and both paper orientations retain the existing grid; invalid saved settings fall back to the last valid layout (or 6-up portrait).
+- Unified add and insert file handling through `core/image-collection.js`. Duplicate files are now filtered against existing items and within the same selection batch, while preserving picker order, captions and `addSeq`.
+- Drag-order application now requires a complete one-to-one key list. Incomplete, duplicated, unknown or ambiguous keys are rejected without replacing the current image list.
+- Compared these Core paths with the Project 1 handoff page: its add/insert, grid and drag-order implementations match the starting Core here. The new validation and dedupe behavior is confined to Project 5 Core; no Drive module code or upload parameters were changed.
+- Added eight image layout/collection tests and wired both suites into the local Core workflow. All local source-contract, local-draft, image-layout, image-collection, GĐV search, Drive-module, syntax and diff checks pass. The Drive package source and upload parameters remain unchanged.
+- Browser-level interaction tests and the remote Actions run remain pending for the environment reasons above.
+
 ## Shared Core extraction milestone — v2-20261022
 
 - PTI now imports the same `core/gdv-search.js` helper module as the 093 test branch and binds the app's existing `normalizeRecordSearch`, `gdvInitials`, and `gdvSearchMatches` names to the shared module. The app-specific GĐV name list and PTI admin module remain app-specific.

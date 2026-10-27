@@ -79,7 +79,7 @@
 <section class="card"><div class="hd">3. Preview & xuất PDF</div><div class="bd"><div id="previewInfo" class="muted">Chưa có preview.</div><div id="preview" class="preview" style="margin-top:10px"></div><div class="actions"><button id="pdf" class="btn dark" disabled>📄 Xuất PDF A4</button><button id="backEdit" class="btn light" style="display:none">✎ Quay lại chỉnh sửa</button><button id="newCase" class="btn green" style="display:none">＋ Làm bản ảnh mới</button></div><div id="pdfWarn" class="pdfWarn hidden"></div><div class="driveBox"><div style="font-weight:700;color:#006f3d;margin-bottom:6px">☁️ Hồ sơ PTI trên Google Drive</div><div class="driveRow"><button type="button" id="driveCreate" class="btn green">☁️ Tạo & lưu hồ sơ Drive</button><button type="button" id="driveSaveProject" class="btn light">💾 Lưu thay đổi hồ sơ</button><button type="button" id="driveSaveDraft" class="btn light">💻 Lưu ảnh tại máy (không tải ảnh lên Drive)</button><span id="driveState" class="driveState">Chưa tạo hồ sơ Drive.</span></div><div id="driveId" class="driveId hidden"></div><div id="driveProgress" class="hidden" style="margin-top:8px;padding:9px 10px;border:1px solid #cfe1d7;border-radius:8px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#176b4b"><span id="driveProgressText">Đang chuẩn bị...</span><strong id="driveProgressPct">0%</strong></div><div style="height:9px;background:#e7efeb;border-radius:999px;overflow:hidden;margin-top:6px"><div id="driveProgressBar" style="height:100%;width:0%;background:#00834a;transition:width .25s ease"></div></div><div id="driveProgressMeta" style="margin-top:5px;font-size:11px;color:#69766f"></div></div><div id="driveUploadMissing" class="driveWarn hidden" style="margin-top:8px;padding:9px 10px;border:1px solid #ead7a5;border-radius:8px;background:#fffaf0"></div><div id="openLoadBox" class="openLoadBox hidden"><div class="openLoadHead"><span id="openLoadText">Đang tải...</span><strong id="openLoadPct">0%</strong></div><div class="openLoadTrack"><div id="openLoadBar" class="openLoadBar"></div></div><div id="openLoadMeta" class="openLoadMeta"></div></div><div class="driveSearchRow" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input id="driveSearch" class="textInput" placeholder="🔎 Tìm Mã HS, BKS hoặc GĐV (nmn, Ngọc…)"><button type="button" id="driveSearchBtn" class="btn light">🔎 Tìm hồ sơ</button></div><div id="driveSearchResults" style="margin-top:8px"></div></div></section>
 <div class="appFooter">The product was developed by the SOS 093 team - 10/2026<br><span class="version-footer">Version build v50-20261022</span></div>
 </div>
-<script src="./core/gdv-search.js"></script><script>
+<script src="./core/gdv-search.js"></script><script src="./core/local-draft-storage.js"></script><script src="./core/image-layout.js"></script><script src="./core/image-collection.js"></script><script>
 const state={groups:[],current:{title:'Bản ảnh chi tiết thiệt hại',items:[]},editing:-1,per:6,orientation:'portrait',pages:[],pageDefs:[],addSeq:0,replaceIndex:-1,insertIndex:-1,filenameCaption:false,driveUploadFailures:[],localDraftId:''};
 const $=id=>document.getElementById(id); const drop=$('drop');
 function formatDateDMY(value){const v=String(value||'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const [y,m,d]=v.split('-');return `${d}/${m}/${y}`}return v;}
@@ -93,7 +93,7 @@ function selectedGdv(){let v=$('gdv').value;if(!v)return 'NONAME';if(v==='Nhập
 // ===== THỨ TỰ ẢNH: LUÔN GIỮ ĐÚNG THỨ TỰ GĐV THÊM ẢNH =====
 // Không đọc EXIF, không đọc ngày chụp và không tự động sắp xếp theo thời gian.
 // addSeq được gán ngay khi GĐV thêm ảnh; ảnh mới luôn nối vào cuối.
-async function addFiles(fs){const candidates=[];for(const f of fs){if(!f.type.startsWith('image/')&&!exts.test(f.name))continue;const key=f.name+'|'+f.size+'|'+f.lastModified;if(!state.current.items.some(x=>x.key===key))candidates.push({file:f,key,caption:state.filenameCaption?fileBaseName(f.name):'',addSeq:++state.addSeq,rotate:0})}if(!candidates.length){msg('Không có ảnh mới để thêm.',true);return}state.current.items.push(...candidates);render();scheduleAutoDraftSave(true);msg(`Đã nhận ${candidates.length} ảnh. Thứ tự giữ nguyên theo thứ tự GĐV thêm ảnh.`,true)}
+async function addFiles(fs){const result=window.PTISharedCore.collectUniqueImageFiles(fs,state.current.items,{addSeq:state.addSeq,filenameCaption:state.filenameCaption});state.addSeq=result.addSeq;if(!result.items.length){msg('Không có ảnh mới để thêm.',true);return}state.current.items.push(...result.items);render();scheduleAutoDraftSave(true);msg(`Đã nhận ${result.items.length} ảnh. Thứ tự giữ nguyên theo thứ tự GĐV thêm ảnh.`,true)}
 $('clear').onclick=()=>{if(!state.current.items.length)return;if(!confirm('Xóa toàn bộ ảnh của nội dung đang làm?'))return;state.current.items=[];render();scheduleAutoDraftSave(true);msg('Đã xóa ảnh của nội dung hiện tại.',true)};
 $('files').addEventListener('change',e=>{addFiles([...e.target.files]);e.target.value=''});
 $('folder').addEventListener('change',e=>{addFiles([...e.target.files]);e.target.value=''});
@@ -115,10 +115,8 @@ function pti093MoveThumbDom(source,target,e){
 function pti093SyncOrderFromDOM(){
   const nodes=[...$('grid').querySelectorAll('.thumb[data-drag-id]')];
   if(!nodes.length)return false;
-  const map=new Map(state.current.items.map(it=>[pti093EnsureDragId(it),it]));
-  const ordered=[];
-  nodes.forEach(n=>{const it=map.get(n.dataset.dragId);if(it)ordered.push(it)});
-  if(ordered.length!==state.current.items.length)return false;
+  const ordered=window.PTISharedCore.orderItemsByKeys(state.current.items,nodes.map(n=>n.dataset.dragId),pti093EnsureDragId);
+  if(!ordered)return false;
   const changed=ordered.some((it,i)=>it!==state.current.items[i]);
   if(changed){
     state.current.items=ordered;
@@ -167,14 +165,14 @@ const imgBox=document.createElement('div');imgBox.className='imgBox';const im=do
 function editGroup(i){if(state.current.items.length){if(!confirm('Mục hiện tại chưa lưu. Bỏ mục hiện tại để sửa mục đã lưu?'))return}state.current={title:state.groups[i].title,items:state.groups[i].items};state.filenameCaption=false;$('filenameCaption').checked=false;$('filenameCaption').closest('.filenameCaptionBox').classList.remove('on');state.groups.splice(i,1);state.editing=i;state.pages=[];$('preview').innerHTML='';$('previewInfo').textContent='Preview cũ đã được hủy vì hồ sơ đang được chỉnh sửa.';scheduleAutoDraftSave(true);$('pdf').disabled=true;$('backEdit').style.display='none';$('newCase').style.display='none';$('title').value=state.current.title;render();window.scrollTo({top:$('drop').getBoundingClientRect().top+scrollY-100,behavior:'smooth'})}
 $('title').addEventListener('change',()=>{state.current.title=$('title').value;scheduleAutoDraftSave(false)});
 $('filenameCaption').addEventListener('change',e=>{state.filenameCaption=e.target.checked;$('filenameCaption').closest('.filenameCaptionBox').classList.toggle('on',state.filenameCaption);if(state.filenameCaption){state.current.items.forEach(it=>{it.caption=fileBaseName(it.file.name)});render();scheduleAutoDraftSave(false);msg('Đã lấy tên file (bỏ phần đuôi) làm thuyết minh cho các ảnh trong mục này.',true)}else{msg('Đã tắt chế độ lấy tên file; ảnh mới sẽ quay về cách thuyết minh bình thường.',true)}});
-$('insertFile').addEventListener('change',async e=>{const fs=[...e.target.files],idx=state.insertIndex;e.target.value='';state.insertIndex=-1;if(idx<0||idx>=state.current.items.length||!fs.length)return;const candidates=[];for(const f of fs){if(!f.type.startsWith('image/')&&!exts.test(f.name))continue;const key=f.name+'|'+f.size+'|'+f.lastModified;if(state.current.items.some(x=>x.key===key)||candidates.some(x=>x.key===key))continue;candidates.push({file:f,key,caption:state.filenameCaption?fileBaseName(f.name):'',addSeq:++state.addSeq,rotate:0})}if(!candidates.length){msg('Không có ảnh mới để chèn.',true);return}state.current.items.splice(idx+1,0,...candidates);render();scheduleAutoDraftSave(true);msg(`Đã chèn ${candidates.length} ảnh sau ảnh số ${idx+1}.`,true)});
+ $('insertFile').addEventListener('change',async e=>{const fs=[...e.target.files],idx=state.insertIndex;e.target.value='';state.insertIndex=-1;if(idx<0||idx>=state.current.items.length||!fs.length)return;const result=window.PTISharedCore.collectUniqueImageFiles(fs,state.current.items,{addSeq:state.addSeq,filenameCaption:state.filenameCaption});state.addSeq=result.addSeq;if(!result.items.length){msg('Không có ảnh mới để chèn.',true);return}state.current.items.splice(idx+1,0,...result.items);render();scheduleAutoDraftSave(true);msg(`Đã chèn ${result.items.length} ảnh sau ảnh số ${idx+1}.`,true)});
 $('replaceFile').addEventListener('change',async e=>{const f=e.target.files[0],i=state.replaceIndex;e.target.value='';state.replaceIndex=-1;if(!f||i<0||i>=state.current.items.length)return;if(!f.type.startsWith('image/')&&!exts.test(f.name))return;const old=state.current.items[i];const key=f.name+'|'+f.size+'|'+f.lastModified;const dup=state.current.items.some((x,j)=>j!==i&&x.key===key);if(dup){msg('Ảnh này đã có trong mục hiện tại.',true);return}state.current.items[i]={...old,file:f,key,caption:state.filenameCaption?fileBaseName(f.name):old.caption};render();scheduleAutoDraftSave(true);msg(`Đã thay ảnh số ${i+1}; vị trí và phần thuyết minh được giữ nguyên.`,true)});
 function commitCurrent(){if(!state.current.items.length)return null;const g={title:state.current.title,items:state.current.items};if(state.editing>=0){state.groups.splice(state.editing,0,g);state.editing=-1}else{const last=state.groups[state.groups.length-1];if(last&&last.title===g.title)last.items.push(...g.items);else state.groups.push(g)}return g}
 $('saveNext').onclick=()=>{state.current.title=$('title').value;const g=commitCurrent();if(!g)return;state.current={title:$('title').value,items:[]};state.filenameCaption=false;$('filenameCaption').checked=false;$('filenameCaption').closest('.filenameCaptionBox').classList.remove('on');render();scheduleAutoDraftSave(true);msg(`Đã lưu “${g.title}”. Hãy chọn nội dung tiếp theo.`,true);window.scrollTo({top:$('drop').getBoundingClientRect().top+scrollY-100,behavior:'smooth'})};
 $('finish').onclick=()=>{state.current.title=$('title').value;if(state.current.items.length)commitCurrent();$('title').value=state.current.title;state.current={title:'Bản ảnh chi tiết thiệt hại',items:[]};state.filenameCaption=false;$('filenameCaption').checked=false;$('filenameCaption').closest('.filenameCaptionBox').classList.remove('on');render();scheduleAutoDraftSave(true);makePreview()};
 function getAllGroups(){return state.groups.filter(g=>g.items.length)}
 // counts
-function layoutDims(){const n=state.per;let cols,rows;if(n===1){cols=1;rows=1}else if(n===2){cols=2;rows=1}else if(n===3){cols=3;rows=1}else if(n===4){cols=2;rows=2}else if(n===6){cols=state.orientation==='portrait'?2:3;rows=state.orientation==='portrait'?3:2}else{cols=state.orientation==='portrait'?2:4;rows=state.orientation==='portrait'?4:2}return {cols,rows}}
+function layoutDims(){return window.PTISharedCore.imageGridDimensions(state.per,state.orientation)}
 function renderLayout(){const box=$('layoutPreview'),txt=$('layoutText');if(!box)return;const d=layoutDims();box.style.gridTemplateColumns=`repeat(${d.cols},1fr)`;box.innerHTML='';for(let i=0;i<state.per;i++){const c=document.createElement('div');c.className='layoutcell';c.textContent=i+1;box.appendChild(c)}txt.textContent=`${state.per} ảnh · ${state.orientation==='portrait'?'A4 dọc':'A4 ngang'} · ${d.cols} × ${d.rows}`;}
 [1,2,3,4,6,8].forEach(n=>{const b=document.createElement('button');b.className='opt'+(n===6?' on':'');b.textContent=n;b.onclick=()=>{state.per=n;document.querySelectorAll('#counts .opt').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderLayout();scheduleAutoDraftSave(false)};$('counts').appendChild(b)});
 document.querySelectorAll('#orient .opt').forEach(b=>b.onclick=()=>{state.orientation=b.dataset.o;document.querySelectorAll('#orient .opt').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderLayout();scheduleAutoDraftSave(false)});
@@ -1069,7 +1067,8 @@ const PTI093_LOCAL_DB='pti_local_drafts_v1';
 const PTI093_SESSION_KEY='pti_work_session_id';
 let PTI093_SESSION_ID=sessionStorage.getItem(PTI093_SESSION_KEY)||'';
 if(!PTI093_SESSION_ID){PTI093_SESSION_ID=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);sessionStorage.setItem(PTI093_SESSION_KEY,PTI093_SESSION_ID)}
-const PTI093_AUTO_DRAFT_ID='AUTO-DRAFT';
+const PTI093_LEGACY_AUTO_DRAFT_ID='AUTO-DRAFT';
+const PTI093_AUTO_DRAFT_ID=window.PTISharedCore.autoDraftIdForSession(PTI093_SESSION_ID);
 const PTI093_ACTIVE_SESSION_PREFIX='pti_active_work_session:';
 const PTI093_ACTIVE_SESSION_KEY=PTI093_ACTIVE_SESSION_PREFIX+PTI093_SESSION_ID;
 function touchWorkSession(){try{localStorage.setItem(PTI093_ACTIVE_SESSION_KEY,String(Date.now()))}catch(e){}}
@@ -1082,9 +1081,8 @@ async function clearInactiveAutoDrafts(){
     const drafts=await new Promise((resolve,reject)=>{const q=db.transaction('drafts','readonly').objectStore('drafts').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)});
     const images=await new Promise((resolve,reject)=>{const q=db.transaction('draftImages','readonly').objectStore('draftImages').getAll();q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)});
     const staleIds=new Set(drafts.filter(d=>{
-      if(!d.auto||d.id===PTI093_AUTO_DRAFT_ID)return false;
       let activeAt=0;try{activeAt=Number(localStorage.getItem(PTI093_ACTIVE_SESSION_PREFIX+d.sessionId)||0)}catch(e){}
-      return !activeAt||Date.now()-activeAt>30000;
+      return window.PTISharedCore.isInactiveAutoDraft(d,PTI093_SESSION_ID,activeAt,Date.now(),30000);
     }).map(d=>d.id));
     if(!staleIds.size)return;
     const tx=db.transaction(['drafts','draftImages'],'readwrite');
@@ -1248,6 +1246,16 @@ async function restoreAutoDraft(){
         new Promise((resolve,reject)=>{const q=db.transaction('drafts','readonly').objectStore('drafts').get(PTI093_AUTO_DRAFT_ID);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)}),
         new Promise((resolve,reject)=>{const tx=db.transaction('draftImages','readonly'),q=tx.objectStore('draftImages').index('draftId').getAll(IDBKeyRange.only(PTI093_AUTO_DRAFT_ID));q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)})
       ]);
+      if(!meta){
+        const [legacyMeta,legacyImages]=await Promise.all([
+          new Promise((resolve,reject)=>{const q=db.transaction('drafts','readonly').objectStore('drafts').get(PTI093_LEGACY_AUTO_DRAFT_ID);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)}),
+          new Promise((resolve,reject)=>{const tx=db.transaction('draftImages','readonly'),q=tx.objectStore('draftImages').index('draftId').getAll(IDBKeyRange.only(PTI093_LEGACY_AUTO_DRAFT_ID));q.onsuccess=()=>resolve(q.result||[]);q.onerror=()=>reject(q.error)})
+        ]);
+        if(legacyMeta&&legacyMeta.sessionId===PTI093_SESSION_ID){
+          await window.PTISharedCore.migrateLegacyAutoDraft(db,PTI093_LEGACY_AUTO_DRAFT_ID,PTI093_AUTO_DRAFT_ID,PTI093_SESSION_ID,IDBKeyRange,localDraftTransactionDone);
+          [meta,images]=[{...legacyMeta,id:PTI093_AUTO_DRAFT_ID},legacyImages.map(image=>Object.assign({},image,{id:PTI093_AUTO_DRAFT_ID+'|'+image.sectionIndex+'|'+image.itemIndex,draftId:PTI093_AUTO_DRAFT_ID}))];
+        }
+      }
     }finally{db.close()}
     if(!meta)return;
     // Bản nháp chỉ thuộc phiên đã tạo nó. Phiên mới phải bắt đầu sạch; hồ sơ đã lưu thật không bị xóa.
@@ -1287,9 +1295,8 @@ async function restoreAutoDraft(){
     // Chỉ khôi phục bố cục cũ khi bản nháp thực sự có ảnh đang làm việc.
     const hasActiveWork=restoredImageCount>0;
     if(hasActiveWork){
-      const settings=meta.settings||{};
-      if(settings.orientation==='landscape'||settings.orientation==='portrait')state.orientation=settings.orientation;
-      if([1,2,3,4,6,8].includes(Number(settings.imagesPerPage)))state.per=Number(settings.imagesPerPage);
+      const layout=window.PTISharedCore.normalizeImageLayout(meta.settings,{orientation:state.orientation,imagesPerPage:state.per});
+      state.orientation=layout.orientation;state.per=layout.imagesPerPage;
     }else{
       state.per=6;
       state.orientation='portrait';
@@ -1327,12 +1334,6 @@ async function saveLocalDraft(){
   const existingLocalId=String(state.localDraftId||'').startsWith('LOCAL-')?state.localDraftId:'';
   const id=existingLocalId||('LOCAL-'+new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14)+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
   const total=groups.reduce((n,g)=>n+g.items.length,0);
-  for(const g of [...(state.groups||[]),state.current||{}])for(const it of (g.items||[])){
-    it.driveFileId='';it.driveFileName='';it.driveUploadKey='';
-  }
-  state.driveRecordId='';state.localDraftId=id;
-  try{sessionStorage.removeItem('pti_driveRecordId')}catch(e){}
-  try{localStorage.removeItem('pti_driveRecordId')}catch(e){}
   let db;
   try{
     db=await openLocalDraftDB();
@@ -1353,21 +1354,21 @@ async function saveLocalDraft(){
       status:'Bản lưu tại máy',settings:{paperSize:'A4',orientation:state.orientation,imagesPerPage:state.per},
       sections,updatedAt:new Date().toISOString()};
     progress(25,'Đang ghi thông tin hồ sơ…','Chỉ lưu trên thiết bị này');
-    const tx=db.transaction(['drafts','draftImages'],'readwrite');
-    const drafts=tx.objectStore('drafts'),images=tx.objectStore('draftImages');
-    drafts.put(meta);
-    const idx=images.index('draftId'),cursorReq=idx.openCursor(IDBKeyRange.only(id));
-    cursorReq.onsuccess=()=>{
-      const cursor=cursorReq.result;
-      if(cursor){cursor.delete();cursor.continue();return}
-      progress(45,'Đang lưu ảnh vào bộ nhớ trình duyệt…',total+' ảnh');
-      sections.forEach((section,si)=>section.items.forEach((item,ii)=>{
-        const original=groups[si].items[ii];if(!original||!original.file)return;
-        images.put({id:id+'|'+si+'|'+ii,draftId:id,sectionIndex:si,itemIndex:ii,
-          file:original.file,fileName:item.fileName,type:item.type,lastModified:item.lastModified});
-      }));
-    };
-    await localDraftTransactionDone(tx);
+    const imageRecords=[];
+    sections.forEach((section,si)=>section.items.forEach((item,ii)=>{
+      const original=groups[si].items[ii];if(!original||!original.file)return;
+      imageRecords.push({id:id+'|'+si+'|'+ii,draftId:id,sectionIndex:si,itemIndex:ii,
+        file:original.file,fileName:item.fileName,type:item.type,lastModified:item.lastModified});
+    }));
+    await window.PTISharedCore.replaceLocalDraft(db,id,meta,imageRecords,IDBKeyRange,localDraftTransactionDone,
+      ()=>progress(45,'Đang lưu ảnh vào bộ nhớ trình duyệt…',total+' ảnh'));
+    // Chỉ bỏ liên kết Drive trong bộ nhớ sau khi bản local đã được ghi trọn vẹn.
+    for(const g of [...(state.groups||[]),state.current||{}])for(const it of (g.items||[])){
+      it.driveFileId='';it.driveFileName='';it.driveUploadKey='';
+    }
+    state.driveRecordId='';state.localDraftId=id;
+    try{sessionStorage.removeItem('pti_driveRecordId')}catch(e){}
+    try{localStorage.removeItem('pti_driveRecordId')}catch(e){}
     $('driveId').textContent='💻 ID hồ sơ local: '+id;
     $('driveId').classList.remove('hidden');
     progress(100,'✓ Đã lưu hồ sơ tại máy thành công',total+' ảnh · ID: '+id+' · Không ghi dữ liệu lên Drive');
@@ -1423,9 +1424,9 @@ async function openLocalDraft(id){
   const gdv=meta.gdv||'';
   if([...$('gdv').options].some(o=>o.value===gdv))$('gdv').value=gdv;
   else if(gdv){$('gdv').value='Nhập tên khác';$('gdv').dataset.custom=gdv}
-  const settings=meta.settings||{};
-  if(settings.orientation)state.orientation=settings.orientation;
-  if(settings.imagesPerPage){state.per=Number(settings.imagesPerPage);document.querySelectorAll('#counts .opt').forEach(x=>x.classList.toggle('on',Number(x.textContent)===state.per))}
+  const layout=window.PTISharedCore.normalizeImageLayout(meta.settings,{orientation:state.orientation,imagesPerPage:state.per});
+  state.orientation=layout.orientation;state.per=layout.imagesPerPage;
+  document.querySelectorAll('#counts .opt').forEach(x=>x.classList.toggle('on',Number(x.textContent)===state.per));
   document.querySelectorAll('#orient .opt').forEach(x=>x.classList.toggle('on',x.dataset.o===state.orientation));
   state.groups=groups.slice(1);state.current=groups[0]||{title:'Bản ảnh chi tiết thiệt hại',items:[]};state.editing=-1;
   state.addSeq=0;groups.forEach(g=>g.items.forEach(it=>state.addSeq=Math.max(state.addSeq,it.addSeq||0)));

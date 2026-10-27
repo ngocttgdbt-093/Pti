@@ -9,6 +9,15 @@ const checks = {
   uploadGuard: html.includes('PTI không hỗ trợ tải ảnh hồ sơ lên Drive.'),
   searchHidden: html.includes('.driveBox .driveSearchRow{display:none!important}') && html.includes('.driveBox #driveSearchResults{display:none!important}'),
   localSavePreserved: html.includes('id="driveSaveDraft"') && html.includes("$('driveSaveDraft').onclick=saveDraftWithoutPhotos"),
+  localDraftCoreLoaded: html.includes('./core/local-draft-storage.js') && html.includes('PTISharedCore.replaceLocalDraft'),
+  imageLayoutCoreLoaded: html.includes('./core/image-layout.js') && html.includes('PTISharedCore.imageGridDimensions'),
+  localDraftLayoutNormalized: html.includes('normalizeImageLayout(meta.settings,{orientation:state.orientation,imagesPerPage:state.per})'),
+  imageCollectionCoreLoaded: html.includes('./core/image-collection.js')
+    && (html.match(/collectUniqueImageFiles\(fs,state\.current\.items/g) || []).length===2
+    && html.includes('orderItemsByKeys(state.current.items'),
+  localDraftMutationAfterCommit: html.indexOf('await window.PTISharedCore.replaceLocalDraft') >= 0 && html.indexOf('await window.PTISharedCore.replaceLocalDraft') < html.indexOf("state.driveRecordId='';state.localDraftId=id;"),
+  autoDraftIsSessionScoped: html.includes('autoDraftIdForSession(PTI093_SESSION_ID)') && html.includes('PTI093_LEGACY_AUTO_DRAFT_ID'),
+  legacyAutoDraftMigratesByOwner: html.includes('migrateLegacyAutoDraft(db,PTI093_LEGACY_AUTO_DRAFT_ID,PTI093_AUTO_DRAFT_ID,PTI093_SESSION_ID'),
   adminModuleIncluded: html.includes('./admin-gdv/admin-gdv.js'),
   adminUsesDedicatedApi: admin.includes('PTI_GDV_ADMIN_API_URL')
 };
