@@ -1,0 +1,17 @@
+name: Drive storage regression
+
+on:
+  push:
+    branches:
+      - codex/project5-drive-storage-093
+  pull_request:
+
+jobs:
+  drive-upload-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/drive-upload-invariants.test.js

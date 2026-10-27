@@ -904,7 +904,8 @@ async function prepareDriveItem(it,index,total){
       uploadKey,
       fileName:optimized.fileName,
       mimeType:optimized.mimeType,
-      base64
+      base64,
+      deferIndex:true
     })
   };
 }
@@ -1484,7 +1485,23 @@ async function createDriveRecord(){
     await saveProjectToDrive(false);await finalizeCompletedSession();setDriveState('Đã tạo hồ sơ, lưu ảnh và lưu dữ liệu nháp.');msg('Đã tạo và lưu hồ sơ thành công. Có thể tìm lại theo Mã HS hoặc BKS.',true);
   }catch(e){setDriveState('Chưa hoàn tất hồ sơ: '+e.message,false);msg('Lỗi lưu hồ sơ: '+e.message,true)}finally{btn.disabled=false}
 }
-window.pti093UploadAll = async function(){
+async function commitDriveUploadBatch(recordId,results){
+  if(!results.length)return {success:true,items:[]};
+  const uploadKey='sha256:'+await sha256HexBlob(new Blob([recordId+'|'+results.map(x=>x.prepared.uploadKey).join('|')+'|'+Date.now()]));
+  const payload=JSON.stringify({
+    action:'commitUploadIndex',
+    recordId,
+    uploadKey,
+    items:results.map(x=>({
+      uploadKey:x.prepared.uploadKey,
+      clientKey:x.entry.key,
+      fileId:x.result.fileId
+    }))
+  });
+  return await sendDrivePayload(payload,recordId,uploadKey);
+}
+
+async function pti093UploadAll(){
   const id=state.driveRecordId||sessionStorage.getItem('pti_driveRecordId')||'';
   if(!id){
     setDriveState('Chưa có Record ID Drive.',false);
@@ -1508,11 +1525,12 @@ window.pti093UploadAll = async function(){
   const seen=new Set();
   for(const it of items){
     const key=driveImageKey(it);
-    // Nếu ảnh đã có fileId/uploadKey từ project.pti thì chắc chắn đã được lưu.
-    // Không gửi lại ảnh chỉ vì localStorage của trình duyệt đã mất trạng thái.
-    if(!key || it.driveFileId || it.driveUploadKey || uploaded.has(key) || seen.has(key))continue;
+    if(!key || seen.has(key))continue;
     seen.add(key);
-    unique.push({it,key});
+    // Trạng thái trong nháp/trình duyệt chỉ là gợi ý. Xác minh lại với máy chủ
+    // trước khi bỏ qua ảnh, vì project.pti có thể còn thiếu mục chỉ mục sau lần ghi trước.
+    const needsValidation=!!(it.driveFileId || it.driveUploadKey || it.drivePendingUploadKey || uploaded.has(key) || getDrivePendingUploadKey(id,key));
+    unique.push({it,key,needsValidation});
   }
 
   if(!unique.length){
@@ -1523,8 +1541,8 @@ window.pti093UploadAll = async function(){
 
   // Không còn nút upload riêng: upload được thực hiện trong "Tạo & lưu hồ sơ" và "Lưu thay đổi hồ sơ".
 
-  // V28: chốt 5 ảnh xử lý đồng thời theo mốc V24; mặc định bố cục 6 ảnh A4 dọc.
-  // Mỗi ảnh vẫn chỉ được tính thành công sau khi máy chủ xác nhận.
+  // Skin PTI: kế thừa mốc đã kiểm nghiệm ở 093 V24 — tối đa 5 ảnh đồng thời.
+  // Vẫn đợi từng ảnh hoàn tất và chỉ tăng bộ đếm sau khi máy chủ xác nhận.
   let sent=0;
   const total=unique.length;
   const DRIVE_CONCURRENCY=5;
@@ -1532,6 +1550,7 @@ window.pti093UploadAll = async function(){
   let failures=[];
   let prepTotalMs=0;
   let sendTotalMs=0;
+  const pendingIndexResults=[];
 
   function updateUploadProgress(extra=''){
     const box=$('driveProgress');
@@ -1549,9 +1568,10 @@ window.pti093UploadAll = async function(){
   try{
     updateUploadProgress('Đang bắt đầu');
 
-    // V22: tối đa 3 ảnh cùng xử lý. Không fire-and-forget; mỗi ảnh vẫn phải xác nhận.
+    // Tối đa 5 ảnh cùng xử lý; project.pti xác nhận từng ảnh trước khi tăng bộ đếm.
     for(let start=0;start<unique.length;start+=DRIVE_CONCURRENCY){
       const batch=unique.slice(start,start+DRIVE_CONCURRENCY);
+      const batchResults=[];
       setDriveState('Đang xử lý '+Math.min(start+1,total)+'-'+Math.min(start+batch.length,total)+'/'+total+' ảnh · đã xác nhận '+sent+'/'+total+'...');
 
       const processOne=async(entry)=>{
@@ -1565,23 +1585,28 @@ window.pti093UploadAll = async function(){
           prepTotalMs+=prepMs;
 
           const pending=entry.it.drivePendingUploadKey||getDrivePendingUploadKey(id,entry.key)||'';
-          if(pending){
+          const priorKey=entry.it.driveUploadKey||pending||(uploaded.has(entry.key)?prepared.uploadKey:'');
+          if(entry.needsValidation&&priorKey){
             try{
-              const recovered=await waitForUploadStatus(id,pending);
-              if(recovered&&recovered.success&&recovered.found){
-                entry.it.driveFileId=recovered.fileId||entry.it.driveFileId||'';
-                entry.it.driveFileName=recovered.fileName||entry.it.driveFileName||((entry.it.file&&entry.it.file.name)||'');
-                entry.it.driveUploadKey=pending;
+              const verified=await waitForUploadStatus(id,priorKey,{maxWaitMs:7000,maxChecks:3});
+              if(verified&&verified.success&&verified.found){
+                if(verified.pendingIndex){
+                  batchResults.push({entry,prepared,result:verified,prepMs,sendMs:0});
+                  return {ok:true,pendingCommit:true,recovered:true};
+                }
+                entry.it.driveFileId=verified.fileId||entry.it.driveFileId||'';
+                entry.it.driveFileName=verified.fileName||entry.it.driveFileName||((entry.it.file&&entry.it.file.name)||'');
+                entry.it.driveUploadKey=priorKey;
                 entry.it.drivePendingUploadKey='';
                 saveDrivePendingUploadKey(id,entry.key,'');
                 uploaded.add(prepared.key);
                 scheduleAutoDraftSave(false);
                 sent++;
                 saveDriveUploadedKeys(id,uploaded);
-                updateUploadProgress('Khôi phục xác nhận');
+                updateUploadProgress('Đã xác minh lại trạng thái Drive');
                 return {ok:true,recovered:true};
               }
-            }catch(recoverError){}
+            }catch(validationError){}
           }
 
           entry.it.drivePendingUploadKey=prepared.uploadKey;
@@ -1591,20 +1616,10 @@ window.pti093UploadAll = async function(){
           sendMs=performance.now()-sendStartedAt;
           sendTotalMs+=sendMs;
 
-          entry.it.driveFileId=result&&result.fileId?result.fileId:(entry.it.driveFileId||'');
-          entry.it.driveFileName=result&&result.fileName?result.fileName:((entry.it.file&&entry.it.file.name)||'');
-          entry.it.driveUploadKey=prepared.uploadKey;
-          entry.it.drivePendingUploadKey='';
-          saveDrivePendingUploadKey(id,entry.key,'');
-          uploaded.add(prepared.key);
-          scheduleAutoDraftSave(false);
-          sent++;
-          saveDriveUploadedKeys(id,uploaded);
-          updateUploadProgress(
-            (result&&result.duplicate?'Đã xác nhận ảnh đã có sẵn trên Drive':'Đã xác nhận trên Google Drive')
-            +' · ảnh '+(entry.offset+1)+': chuẩn bị '+(prepMs/1000).toFixed(1)+'s · gửi/xác nhận '+(sendMs/1000).toFixed(1)+'s'
-          );
-          return {ok:true};
+          if(!result||result.success!==true||!result.fileId)throw new Error('Máy chủ chưa xác nhận ảnh để đưa vào grouped commit.');
+          batchResults.push({entry,prepared,result,prepMs,sendMs});
+          return {ok:true,pendingCommit:true};
+
         }catch(e){
           if(entry.it.drivePendingUploadKey)saveDrivePendingUploadKey(id,entry.key,entry.it.drivePendingUploadKey);
           const err=e&&e.message?e.message:String(e||'Gửi ảnh thất bại');
@@ -1619,9 +1634,46 @@ window.pti093UploadAll = async function(){
         }
       };
 
-      const entries=batch.map((x,j)=>({it:x.it,key:x.key,offset:start+j}));
+      const entries=batch.map((x,j)=>({it:x.it,key:x.key,needsValidation:x.needsValidation,offset:start+j}));
       await Promise.all(entries.map(processOne));
+      if(batchResults.length){
+        // Keep the next group moving while Drive finishes its file writes.
+        // The single final index commit still gates every per-image success count.
+        pendingIndexResults.push(...batchResults);
+      }
       await new Promise(resolve=>setTimeout(resolve,0));
+    }
+
+    if(pendingIndexResults.length){
+      try{
+        const committed=await commitDriveUploadBatch(id,pendingIndexResults);
+        const committedItems=committed&&Array.isArray(committed.items)
+          ?committed.items
+          :(committed&&committed.found?pendingIndexResults.map(x=>({success:true,uploadKey:x.prepared.uploadKey,fileId:x.result.fileId,fileName:x.result.fileName})):[]);
+        const committedByKey=new Map(committedItems.map(x=>[x.uploadKey,x]));
+        const confirmations=pendingIndexResults.map(pendingResult=>({pendingResult,confirmed:committedByKey.get(pendingResult.prepared.uploadKey)}));
+        const missing=confirmations.find(x=>!x.confirmed||x.confirmed.success!==true);
+        if(missing)throw new Error('Máy chủ chưa xác nhận chỉ mục ảnh '+(missing.pendingResult.entry.offset+1)+'.');
+        for(const {pendingResult,confirmed} of confirmations){
+          const {entry,prepared,result,prepMs,sendMs}=pendingResult;
+          entry.it.driveFileId=confirmed.fileId||result.fileId||'';
+          entry.it.driveFileName=confirmed.fileName||result.fileName||((entry.it.file&&entry.it.file.name)||'');
+          entry.it.driveUploadKey=prepared.uploadKey;
+          entry.it.drivePendingUploadKey='';
+          saveDrivePendingUploadKey(id,entry.key,'');
+          uploaded.add(prepared.key);
+          scheduleAutoDraftSave(false);
+          sent++;
+          saveDriveUploadedKeys(id,uploaded);
+          updateUploadProgress('Đã xác nhận trên Google Drive · ảnh '+(entry.offset+1)+': chuẩn bị '+(prepMs/1000).toFixed(1)+'s · gửi/xác nhận '+(sendMs/1000).toFixed(1)+'s');
+        }
+      }catch(commitError){
+        for(const pendingResult of pendingIndexResults){
+          const {entry}=pendingResult;
+          failures.push({key:entry.key,name:(entry.it&&entry.it.file&&entry.it.file.name)||('Ảnh số '+(entry.offset+1)),index:entry.offset,error:commitError&&commitError.message?commitError.message:String(commitError)});
+        }
+        updateUploadProgress('Chưa xác nhận được chỉ mục của nhóm ảnh');
+      }
     }
 
 
@@ -1651,6 +1703,8 @@ window.pti093UploadAll = async function(){
     return {sent,total,failures};
   }
 }
+
+window.pti093UploadAll = pti093UploadAll;
 $('driveCreate').onclick=createDriveRecord;
 render();renderLayout();
 ['bks','hoso','gdv','date','garage'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{if(id==='gdv'&&el.value)localStorage.setItem('pti_gdv',el.value);scheduleAutoDraftSave(false)});el.addEventListener('change',()=>scheduleAutoDraftSave(false))});
