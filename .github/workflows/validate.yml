@@ -2,9 +2,9 @@ name: Validate PTI JavaScript
 
 on:
   push:
-    branches: [main, refactor/core-modules-test-20261022]
+    branches: [main, refactor/core-modules-test-20261022, codex/project5-drive-module-package]
   pull_request:
-    branches: [main, refactor/core-modules-test-20261022]
+    branches: [main, refactor/core-modules-test-20261022, codex/project5-drive-module-package]
   workflow_dispatch:
 
 jobs:
@@ -36,9 +36,13 @@ jobs:
         run: node --check admin-gdv/admin-gdv.js
 
       - name: Check PTI case-Drive isolation contract
-        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.head_ref == 'refactor/core-modules-test-20261022'
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'refactor/core-modules-test-20261022' || github.head_ref == 'codex/project5-drive-module-package'
         run: node tests/source-contract.test.js
 
       - name: Test shared GĐV search Core module
-        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.head_ref == 'refactor/core-modules-test-20261022'
+        if: github.ref_name == 'refactor/core-modules-test-20261022' || github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'refactor/core-modules-test-20261022' || github.head_ref == 'codex/project5-drive-module-package'
         run: node tests/gdv-search.test.js
+
+      - name: Test 093 Drive storage module package
+        if: github.ref_name == 'codex/project5-drive-module-package' || github.head_ref == 'codex/project5-drive-module-package'
+        run: node --test modules/drive-storage-093/drive-storage-093.test.js

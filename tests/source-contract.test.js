@@ -4,6 +4,7 @@ const html = fs.readFileSync('index.html', 'utf8');
 const admin = fs.readFileSync('admin-gdv/admin-gdv.js', 'utf8');
 const checks = {
   caseDriveDisabled: html.includes('const PTI_CASE_DRIVE_ENABLED=false'),
+  driveModuleIsNotLoadedByPti: !html.includes('./modules/drive-storage-093/DriveStorage093.frontend.js'),
   createGuard: html.includes('PTI không hỗ trợ lưu hồ sơ ảnh lên Drive.'),
   uploadGuard: html.includes('PTI không hỗ trợ tải ảnh hồ sơ lên Drive.'),
   searchHidden: html.includes('.driveBox .driveSearchRow{display:none!important}') && html.includes('.driveBox #driveSearchResults{display:none!important}'),
