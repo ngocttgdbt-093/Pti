@@ -52,4 +52,24 @@ assert.match(dateBlock, /dispatchEvent\(new Event\('input'/);
 assert.match(dateBlock, /dispatchEvent\(new Event\('change'/);
 assert.match(dateBlock, /Ngày không hợp lệ\. Vui lòng kiểm tra lại\./);
 
+
+const getDateIsoLine = dateBlock.split('\n').find(line => line.startsWith('function getDateISO()'));
+const setDateDmyLine = dateBlock.split('\n').find(line => line.startsWith('function setDateDMY(value)'));
+assert.ok(getDateIsoLine, 'ISO parser source is present');
+assert.ok(setDateDmyLine, 'Core dd/mm/yyyy setter source is present');
+
+function runDateHelper(source, input, expression) {
+  const element = { value: input, setCustomValidity() {} };
+  const getElement = () => element;
+  return vm.runInNewContext(source + '\n' + expression, { $: getElement, Date });
+}
+assert.equal(runDateHelper(getDateIsoLine, '05/01/2026', 'getDateISO()'), '2026-01-05',
+  '05/01/2026 maps to 2026-01-05, not 2026-05-01');
+assert.equal(runDateHelper(getDateIsoLine, '31/12/2026', 'getDateISO()'), '2026-12-31',
+  'end-of-year dates preserve day/month order');
+assert.equal(runDateHelper(getDateIsoLine, '31/02/2026', 'getDateISO()'), '',
+  'impossible dates are rejected');
+assert.equal(runDateHelper(setDateDmyLine, 'unused', "setDateDMY('2026-01-05'); $('date').value"), '05/01/2026',
+  'Core formatter displays ISO dates as dd/mm/yyyy');
+
 console.log(`PASS: syntax-compiled ${inlineScripts.length} inline scripts and verified calendar/source contracts.`);
