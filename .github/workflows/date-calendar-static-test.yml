@@ -1,0 +1,28 @@
+name: Date calendar static verification
+
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "tests/date-calendar-ddmmyyyy.static.test.cjs"
+      - ".github/workflows/date-calendar-static-test.yml"
+  push:
+    branches:
+      - "feat/core-date-calendar-ddmmyyyy-20261028"
+    paths:
+      - "index.html"
+      - "tests/date-calendar-ddmmyyyy.static.test.cjs"
+      - ".github/workflows/date-calendar-static-test.yml"
+
+jobs:
+  date-calendar-static-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run date calendar checks
+        run: node tests/date-calendar-ddmmyyyy.static.test.cjs
